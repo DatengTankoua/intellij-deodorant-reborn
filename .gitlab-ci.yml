@@ -5,7 +5,7 @@ stages:
 
 build:
   stage: build
-  image: gradle:7.6-jdk11
+  image: gradle:8.5-jdk11
   script:
     - ./gradlew build
   except:
