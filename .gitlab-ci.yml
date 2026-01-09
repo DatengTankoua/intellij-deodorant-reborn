@@ -1,0 +1,32 @@
+stages:
+  - build
+  - test
+  - release
+
+build:
+  stage: build
+  image: gradle:7.6-jdk11
+  script:
+    - ./gradlew build
+  except:
+    - /^dev-.*$/
+    - /^stable-.*$/
+
+test:
+  stage: test
+  image: gradle:7.6-jdk11
+  script:
+    - ./gradlew test
+  artifacts:
+    reports:
+      junit: build/test-results/test/*.xml
+
+release:
+  stage: release
+  image: gradle:7.6-jdk11
+  script:
+    - ./gradlew publishPlugin
+  only:
+    - /^dev-.*$/
+    - /^stable-.*$/
+  when: manual
