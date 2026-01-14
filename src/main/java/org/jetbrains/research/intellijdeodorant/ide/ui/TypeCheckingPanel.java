@@ -61,7 +61,7 @@ class TypeCheckingPanel extends AbstractRefactoringPanel {
         };
 
         if (refactoring instanceof ReplaceTypeCodeWithStateStrategy) {
-            ApplicationManager.getApplication().invokeAndWait(() -> new ReplaceTypeCodeWithStateStrategyDialog(
+            ApplicationManager.getApplication().invokeLater(() -> new ReplaceTypeCodeWithStateStrategyDialog(
                     (ReplaceTypeCodeWithStateStrategy) refactoring,
                     applyRefactoring
             ).show());
