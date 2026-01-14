@@ -24,7 +24,7 @@ public class GodClassTreeTableModel extends AbstractTreeTableModel {
             ExtractClassCandidateGroup group = (ExtractClassCandidateGroup) abstractExtractClassCandidateRefactoringGroup.getCandidateRefactoringGroup();
 
             if (index == 0) {
-                return group.getSource();
+                return com.intellij.openapi.application.ReadAction.compute(() -> group.getSource());
             } else {
                 return "";
             }
@@ -35,7 +35,7 @@ public class GodClassTreeTableModel extends AbstractTreeTableModel {
                 case 0:
                     return "";
                 case 1:
-                    return candidateRefactoring.getSourceEntity();
+                    return com.intellij.openapi.application.ReadAction.compute(() -> candidateRefactoring.getSourceEntity());
                 case 2:
                     return candidateRefactoring.getExtractedFieldFragments().size() + "/" + candidateRefactoring.getExtractedMethods().size();
             }

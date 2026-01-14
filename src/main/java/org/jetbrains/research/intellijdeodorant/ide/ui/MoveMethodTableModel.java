@@ -194,7 +194,12 @@ class MoveMethodTableModel extends AbstractTableModel {
                         + IntelliJDeodorantBundle.message("java.member.is.not.valid"));
             case MOVE_TO_COLUMN_INDEX:
                 Optional<PsiClass> targetClass = refactorings.get(rowIndex).getOptionalTargetClass();
-                return targetClass.map(PsiUtils::getHumanReadableName).orElseGet(() -> IntelliJDeodorantBundle.message("target.class.is.not.valid"));
+                
+                return targetClass.map(psiClass -> 
+                    com.intellij.openapi.application.ReadAction.compute(() -> 
+                        org.jetbrains.research.intellijdeodorant.utils.PsiUtils.getHumanReadableName(psiClass)
+                    )
+                ).orElseGet(() -> IntelliJDeodorantBundle.message("target.class.is.not.valid"));
             case ACCESSED_MEMBERS_COUNT_INDEX:
                 return refactorings.get(rowIndex).getSourceAccessedMembers() + "/" + refactorings.get(rowIndex).getTargetAccessedMembers();
         }
