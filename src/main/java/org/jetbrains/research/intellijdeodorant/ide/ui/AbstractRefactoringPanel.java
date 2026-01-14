@@ -7,6 +7,7 @@ import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationDisplayType;
 import com.intellij.notification.NotificationGroup;
 import com.intellij.notification.Notifications;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.compiler.CompileScope;
 import com.intellij.openapi.compiler.CompileStatusNotification;
@@ -302,7 +303,8 @@ public abstract class AbstractRefactoringPanel extends JPanel {
                 IntelliJDeodorantBundle.message(detectIndicatorStatusTextKey), true) {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
-                ApplicationManager.getApplication().runReadAction(() -> {
+                
+                ReadAction.run(() -> {
                     List<RefactoringType.AbstractCandidateRefactoringGroup> candidates =
                             refactoringType.getRefactoringOpportunities(projectInfo, indicator);
                     if (candidates == null) {
@@ -310,9 +312,12 @@ public abstract class AbstractRefactoringPanel extends JPanel {
                         candidates = new ArrayList<>();
                     }
                     logFound(project, candidates.size());
-                    candidates.sort(Comparator.comparing(o -> o.getCandidates().get(0).getSourceClass().getQualifiedName()));
-                    model.setCandidateRefactoringGroups(candidates);
-                    ApplicationManager.getApplication().invokeLater(() -> showRefactoringsTable());
+                    List<RefactoringType.AbstractCandidateRefactoringGroup> sortedCandidates = candidates;
+                    sortedCandidates.sort(Comparator.comparing(o -> o.getCandidates().get(0).getSourceClass().getQualifiedName()));
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        model.setCandidateRefactoringGroups(sortedCandidates);
+                        showRefactoringsTable();
+                    });
                 });
             }
 
