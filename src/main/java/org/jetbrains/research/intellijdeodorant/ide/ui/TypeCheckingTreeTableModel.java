@@ -24,7 +24,7 @@ public class TypeCheckingTreeTableModel extends AbstractTreeTableModel {
 
             switch (index) {
                 case 0:
-                    return group.toString();
+                    return com.intellij.openapi.application.ReadAction.compute(() -> group.toString());
                 case 2:
                     return Integer.toString(group.getGroupSizeAtSystemLevel());
                 case 3:
@@ -39,7 +39,7 @@ public class TypeCheckingTreeTableModel extends AbstractTreeTableModel {
             TypeCheckElimination typeCheckElimination = (TypeCheckElimination) abstractTypeCheckElimination.getCandidateRefactoring();
             switch (index) {
                 case 0:
-                    return typeCheckElimination.toString();
+                    return com.intellij.openapi.application.ReadAction.compute(() -> typeCheckElimination.toString());
                 case 1:
                     if (typeCheckElimination.getExistingInheritanceTree() == null) {
                         return IntelliJDeodorantBundle.message("replace.type.code.with.state.strategy.name");
