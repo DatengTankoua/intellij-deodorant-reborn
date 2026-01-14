@@ -608,6 +608,11 @@ public class SystemObject {
             }
             double avgNumberOfStatements = elimination.getAverageNumberOfStatements();
             averageNumberOfStatementsInGroupSum += avgNumberOfStatements;
+            
+            // IMPORTANT: Cache toString() here, where we are already in a read action
+            // This avoids later PSI accesses during UI rendering
+            elimination.cacheToString();
+            
             typeCheckEliminationGroup.addCandidate(elimination);
         }
         double averageGroupSizeAtClassLevelSum = 0;
@@ -621,6 +626,11 @@ public class SystemObject {
         typeCheckEliminationGroup.setGroupSizeAtSystemLevel(typeCheckEliminations.size());
         typeCheckEliminationGroup.setAverageGroupSizeAtClassLevel(averageGroupSizeAtClassLevelSum / typeDeclarationMap.keySet().size());
         typeCheckEliminationGroup.setAverageNumberOfStatementsInGroup(averageNumberOfStatementsInGroupSum / typeCheckEliminations.size());
+        
+        // IMPORTANT: Cache toString() here, where we are already in a read action
+        // This avoids later PSI accesses during UI rendering
+        typeCheckEliminationGroup.cacheToString();
+        
         return typeCheckEliminationGroup;
     }
 
