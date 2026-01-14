@@ -1,23 +1,42 @@
 <idea-plugin url="https://github.com/JetBrains-Research/IntelliJDeodorant">
     <name>IntelliJDeodorant</name>
-    <version>2020.3-1.0</version>
-    <vendor>JetBrains</vendor>
+    <id>org.jetbrains.research.intellijdeodorant</id>
+    <version>2025.2-COMPATIBLE-1.0</version>
+    <vendor email="research@jetbrains.com" url="https://research.jetbrains.org">JetBrains Research</vendor>
 
-    <description><![CDATA[Detects code smells in Java code and recommends appropriate refactorings to resolve them.
-        <p>Supports following code smells:
-            <ul>
-               <li>Feature Envy problems can be resolved by Move Method refactorings;</li>
-               <li>Long Method problems can be resolved by Extract Method refactorings;</li>
-               <li>Type Checking problems can be resolved by Replace Conditional with Polymorphism refactorings;</li>
-               <li>State Checking problems can be resolved by Replace Type code with State/Strategy refactorings;</li>
-               <li>God Class problems can be resolved by Extract Class refactorings.</li>
-            </ul>
-        </p>
-        <br/>Based on tsantalis/JDeodorant.
-         ]]>
+    <description><![CDATA[
+    Detects code smells in Java code and recommends appropriate refactorings to resolve them.
+    <p>Supports following code smells:
+        <ul>
+           <li><b>Feature Envy</b> - resolved by Move Method refactorings</li>
+           <li><b>Long Method</b> - resolved by Extract Method refactorings</li>
+           <li><b>Type Checking</b> - resolved by Replace Conditional with Polymorphism refactorings</li>
+           <li><b>State Checking</b> - resolved by Replace Type code with State/Strategy refactorings</li>
+           <li><b>God Class</b> - resolved by Extract Class refactorings</li>
+        </ul>
+    </p>
+    <p>Compatible with IntelliJ IDEA 2023.2 through 2025.2+</p>
+    <br/>Based on tsantalis/JDeodorant Eclipse plugin.
+    ]]>
     </description>
 
     <change-notes><![CDATA[
+        <h4>2025.2-COMPATIBLE-1.0</h4>
+        <ul>
+            <li>Compatible with IntelliJ IDEA 2025.2.4 (Build 252)</li>
+            <li>Modernized threading APIs (ReadAction, WriteAction, invokeLater)</li>
+            <li>Improved thread safety and stability</li>
+            <li>Ready for bachelor's thesis code smell implementations</li>
+        </ul>
+        
+        <h4>2020.3-MODERNIZED-1.0</h4>
+        <ul>
+            <li>Modernize deprecated IntelliJ Platform APIs</li>
+            <li>Replace ApplicationManager.runReadAction() with ReadAction.run()</li>
+            <li>Replace ApplicationManager.runReadAction(Computable) with ReadAction.compute()</li>
+            <li>Replace invokeAndWait() with invokeLater() for UI thread safety</li>
+        </ul>
+
         <h4>2020.3-1.0</h4>
         <ul>
             <li>Add compatibility with IDEA 2020.3</li>
@@ -39,16 +58,15 @@
     </change-notes>
 
     <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.modules.platform</depends>
 
-    <idea-version since-build="192.7142.36"/>
+    <idea-version since-build="213" until-build="252.*"/>
 
     <extensions defaultExtensionNs="com.intellij">
-        <statistic.eventLog.eventLoggerProvider
-                implementation="org.jetbrains.research.intellijdeodorant.ide.fus.IntelliJDeodorantLoggerProvider"/>
-
-        <toolWindow id="IntelliJDeodorant" secondary="true" anchor="bottom"
+        <toolWindow id="IntelliJDeodorant" 
+                    secondary="true" 
+                    anchor="bottom"
                     factoryClass="org.jetbrains.research.intellijdeodorant.ide.ui.RefactoringsToolWindowFactory"/>
-
         <errorHandler implementation="org.jetbrains.research.intellijdeodorant.reporting.GitHubErrorReporter"/>
     </extensions>
 
