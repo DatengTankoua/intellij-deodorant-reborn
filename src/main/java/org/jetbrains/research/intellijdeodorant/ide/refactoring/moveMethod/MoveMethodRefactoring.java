@@ -1,7 +1,6 @@
 package org.jetbrains.research.intellijdeodorant.ide.refactoring.moveMethod;
 
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.util.Computable;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.psi.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -42,13 +41,11 @@ public class MoveMethodRefactoring implements Refactoring {
             int sourceAccessedMembers,
             int targetAccessedMembers
     ) {
-        this.method = ApplicationManager.getApplication().runReadAction(
-                (Computable<SmartPsiElementPointer<PsiMethod>>) () ->
-                        SmartPointerManager.getInstance(method.getProject()).createSmartPsiElementPointer(method)
+        this.method = ReadAction.compute(() ->
+                SmartPointerManager.getInstance(method.getProject()).createSmartPsiElementPointer(method)
         );
-        this.targetClass = ApplicationManager.getApplication().runReadAction(
-                (Computable<SmartPsiElementPointer<PsiClass>>) () ->
-                        SmartPointerManager.getInstance(targetClass.getProject()).createSmartPsiElementPointer(targetClass)
+        this.targetClass = ReadAction.compute(() ->
+                SmartPointerManager.getInstance(targetClass.getProject()).createSmartPsiElementPointer(targetClass)
         );
         this.qualifiedMethodName = getHumanReadableName(this.method.getElement());
         this.sourceAccessedMembers = sourceAccessedMembers;

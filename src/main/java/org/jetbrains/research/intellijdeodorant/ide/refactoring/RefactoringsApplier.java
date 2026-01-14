@@ -1,6 +1,7 @@
 package org.jetbrains.research.intellijdeodorant.ide.refactoring;
 
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
+import com.intellij.openapi.application.WriteAction;
 import com.intellij.psi.*;
 import com.intellij.refactoring.move.moveInstanceMethod.MoveInstanceMethodDialog;
 import org.jetbrains.annotations.NotNull;
@@ -23,7 +24,7 @@ public class RefactoringsApplier {
 
         final Map<PsiClass, List<MoveMethodRefactoring>> groupedRefactorings = prepareRefactorings(refactorings);
 
-        ApplicationManager.getApplication().runReadAction(() -> {
+        ReadAction.run(() -> {
             for (Map.Entry<PsiClass, List<MoveMethodRefactoring>> refactoring : groupedRefactorings.entrySet()) {
                 final PsiClass target = refactoring.getKey();
                 refactoring.getValue().forEach(r -> {
@@ -65,7 +66,7 @@ public class RefactoringsApplier {
         }
         MoveInstanceMethodDialog dialog = new MoveInstanceMethodDialog(methodToMove, available);
         dialog.setTitle("Move Instance Method " + PsiUtils.calculateSignature(methodToMove));
-        ApplicationManager.getApplication().invokeAndWait(dialog::show);
+        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater(() -> dialog.show());
     }
 
     private static PsiVariable[] getAvailableVariables(@NotNull PsiMethod method, @NotNull PsiClass target) {
