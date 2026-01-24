@@ -32,3 +32,5 @@ release:
     paths:
       - build/distributions/*.zip
     expire_in: 6 mos
+  rules:
+    - if: $CI_COMMIT_TAG
