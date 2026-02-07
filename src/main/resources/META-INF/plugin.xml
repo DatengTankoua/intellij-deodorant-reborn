@@ -70,4 +70,18 @@
         <errorHandler implementation="org.jetbrains.research.intellijdeodorant.reporting.GitHubErrorReporter"/>
     </extensions>
 
+     <actions>
+        <group id="IntelliJDeodorant.TopLevelGroup" 
+               text="IntelliJDeodorant" 
+               description="IntelliJDeodorant code smell detection">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            
+            <action id="IntelliJDeodorant.DetectDuplicateCode"
+                    class="org.jetbrains.research.intellijdeodorant.ide.refactoring.duplicateCode.DetectDuplicateCodeAction"
+                    text="Detect Duplicate Code"
+                    description="Detect duplicate code using PMD">
+            </action>
+        </group>
+    </actions>
+
 </idea-plugin>
