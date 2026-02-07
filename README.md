@@ -26,6 +26,13 @@ The tool supports several code smells, namely Feature Envy, Type/State Checking,
 
 - **God Class** is a name given to a large and complex class that contains too many components. The tool identifies sets of attributes and methods in a class that could be moved into a separate class to simplify the understanding of the code, i.e. an **Extract Class** refactoring can be performed.
 
+- **Duplicate Code** occurs when similar or identical code fragments appear in multiple locations. The tool uses PMD's Copy-Paste-Detector (CPD) to identify duplicate code blocks and offers three refactoring strategies:
+  - **Within-Class**: Extracts duplicate methods within the same class into a single method
+  - **Pull-Up to Superclass**: Moves duplicate methods from multiple subclasses to their common superclass
+  - **Move to Utility Class**: Extracts duplicate code from unrelated classes into a new utility class
+  
+  The plugin supports both Type-1 (exact) and Type-2 (parameterized) clones, automatically identifying type differences and adding appropriate parameters while preserving value differences for later adjustment.
+
 ## Getting started
 The ```IntelliJDeodorant``` tool window will appear in IntelliJ IDEA. Each tab of this window contains a ```Refresh``` button that allows to search for the necessary code smell in the entire project and the table with the results of the search. To apply any refactoring, simply select a suggestion in the table and click the ```Refactor``` button.
 
