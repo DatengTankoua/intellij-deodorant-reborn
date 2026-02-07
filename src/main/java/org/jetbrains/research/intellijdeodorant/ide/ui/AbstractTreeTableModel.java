@@ -43,7 +43,7 @@ public abstract class AbstractTreeTableModel extends DefaultTreeModel implements
     }
 
     @Override
-    public Class getColumnClass(int column) {
+    public Class<?> getColumnClass(int column) {
         if (column == 0) {
             return TreeTableModel.class;
         }

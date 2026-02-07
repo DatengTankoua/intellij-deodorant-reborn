@@ -19,10 +19,12 @@ class RefactoringsToolWindowFactory implements ToolWindowFactory {
         Content extractMethodPanel = contentManager.getFactory().createContent(new ExtractMethodPanel(scope), IntelliJDeodorantBundle.message("long.method.smell.name"), false);
         Content godClassPanel = contentManager.getFactory().createContent(new GodClassPanel(scope), IntelliJDeodorantBundle.message("god.class.smell.name"), false);
         Content typeCheckPanel = contentManager.getFactory().createContent(new TypeCheckingPanel(scope), IntelliJDeodorantBundle.message("type.state.checking.smell.name"), false);
+        Content duplicateCodePanel = contentManager.getFactory().createContent(new DuplicateCodePanel(project, scope), "Duplicate Code", false);
         contentManager.addContent(moveMethodPanel);
         contentManager.addContent(extractMethodPanel);
         contentManager.addContent(godClassPanel);
         contentManager.addContent(typeCheckPanel);
+        contentManager.addContent(duplicateCodePanel);
     }
 
 }

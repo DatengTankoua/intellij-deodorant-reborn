@@ -48,7 +48,7 @@ public class ExtractMethodTreeTableModel extends DefaultTreeModel implements Tre
     }
 
     @Override
-    public Class getColumnClass(int column) {
+    public Class<?> getColumnClass(int column) {
         if (column == 0) {
             return TreeTableModel.class;
         } else if (column == 1) {
