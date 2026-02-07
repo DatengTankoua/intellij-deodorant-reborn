@@ -63,7 +63,7 @@ public class ExtractMethodTreeTableModel extends DefaultTreeModel implements Tre
             ASTSlice entry = (ASTSlice) o;
             PsiVariable variable = entry.getLocalVariableCriterion();
             if (index == 1) {
-                return variable == null ? "" : variable.getName();
+                return variable == null ? "" : com.intellij.openapi.application.ReadAction.compute(() -> variable.getName());
             }
             return "";
         } else if (o instanceof ExtractMethodCandidateGroup) {
@@ -73,7 +73,7 @@ public class ExtractMethodTreeTableModel extends DefaultTreeModel implements Tre
                     return group.toString();
                 case 1:
                     PsiVariable firstCandidate = group.getCandidates().iterator().next().getLocalVariableCriterion();
-                    return firstCandidate == null ? "" : firstCandidate.getName();
+                    return firstCandidate == null ? "" : com.intellij.openapi.application.ReadAction.compute(() -> firstCandidate.getName());
                 default:
                     return "";
             }

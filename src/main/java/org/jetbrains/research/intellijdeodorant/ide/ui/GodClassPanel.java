@@ -40,7 +40,7 @@ public class GodClassPanel extends AbstractRefactoringPanel {
         AbstractExtractClassRefactoring abstractRefactoring = (AbstractExtractClassRefactoring) getAbstractRefactoringFromAbstractCandidateRefactoring(candidateRefactoring);
 
         Project project = scope.getProject();
-        ApplicationManager.getApplication().invokeAndWait(() -> {
+        ApplicationManager.getApplication().invokeLater(() -> {
             removeHighlighters(project);
             GodClassUserInputDialog dialog = new GodClassUserInputDialog(abstractRefactoring, this);
             dialog.show();

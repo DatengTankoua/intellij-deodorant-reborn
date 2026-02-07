@@ -3,6 +3,7 @@ package org.jetbrains.research.intellijdeodorant.ide.ui;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.EditorHelper;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
@@ -176,7 +177,7 @@ class MoveMethodPanel extends JPanel {
         final Task.Backgroundable backgroundable = new Task.Backgroundable(project, IntelliJDeodorantBundle.message("feature.envy.detect.indicator.status"), true) {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
-                ApplicationManager.getApplication().runReadAction(() -> {
+                ReadAction.run(() -> {
                     List<MoveMethodCandidateRefactoring> candidates = JDeodorantFacade.getMoveMethodRefactoringOpportunities(projectInfo, indicator, classNamesToBeExamined);
                     final List<MoveMethodRefactoring> references = candidates.stream().filter(Objects::nonNull)
                             .map(x ->

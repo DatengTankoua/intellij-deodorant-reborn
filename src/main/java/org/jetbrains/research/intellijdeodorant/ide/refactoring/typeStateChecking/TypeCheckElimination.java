@@ -48,6 +48,8 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
     private InheritanceTree inheritanceTreeMatchingWithStaticTypes;
     private final Map<PsiElement, String> staticFieldSubclassTypeMap;
     private final Map<PsiExpression, DefaultMutableTreeNode> remainingIfStatementExpressionMap;
+    
+    private String cachedToString = null;
     private String abstractMethodName;
     private volatile int hashCode = 0;
     private int groupSizeAtClassLevel;
@@ -1205,7 +1207,21 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
     }
 
     public String toString() {
-        return PsiUtils.calculateSignature(getTypeCheckMethod());
+        // Caches the string representation if not already cached
+        if (cachedToString != null) {
+            return cachedToString;
+        }
+        return com.intellij.openapi.application.ReadAction.compute(() -> 
+            PsiUtils.calculateSignature(getTypeCheckMethod())
+        );
+    }
+    
+    /**
+     * Caches the string representation of this refactoring.
+     * MUST be called within a read action!
+     */
+    public void cacheToString() {
+        cachedToString = PsiUtils.calculateSignature(getTypeCheckMethod());
     }
 
     public int getGroupSizeAtClassLevel() {

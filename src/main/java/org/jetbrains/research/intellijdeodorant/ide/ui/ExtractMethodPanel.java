@@ -3,6 +3,7 @@ package org.jetbrains.research.intellijdeodorant.ide.ui;
 import com.intellij.analysis.AnalysisScope;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.EditorHelper;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColors;
@@ -155,7 +156,7 @@ class ExtractMethodPanel extends JPanel {
         if (selectedPath != null) {
             Object o = selectedPath.getLastPathComponent();
             if (o instanceof ASTSlice) {
-                ApplicationManager.getApplication().invokeAndWait(doExtract((ASTSlice) o));
+                ApplicationManager.getApplication().invokeLater(doExtract((ASTSlice) o));
             }
         }
     }
@@ -206,7 +207,7 @@ class ExtractMethodPanel extends JPanel {
                 IntelliJDeodorantBundle.message("long.method.detect.indicator.status"), true) {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
-                ApplicationManager.getApplication().runReadAction(() -> {
+                ReadAction.run(() -> {
                     Set<ASTSliceGroup> candidates = getExtractMethodRefactoringOpportunities(projectInfo, indicator);
                     final List<ExtractMethodCandidateGroup> extractMethodCandidateGroups = candidates.stream().filter(Objects::nonNull)
                             .map(sliceGroup ->
@@ -217,8 +218,10 @@ class ExtractMethodPanel extends JPanel {
                             .map(ExtractMethodCandidateGroup::new)
                             .sorted(Comparator.comparing(ExtractMethodCandidateGroup::getDescription))
                             .collect(toList());
-                    treeTableModel.setCandidateRefactoringGroups(extractMethodCandidateGroups);
-                    ApplicationManager.getApplication().invokeLater(() -> showRefactoringsTable());
+                    ApplicationManager.getApplication().invokeLater(() -> {
+                        treeTableModel.setCandidateRefactoringGroups(extractMethodCandidateGroups);
+                        showRefactoringsTable();
+                    });
                     IntelliJDeodorantCounterCollector.getInstance().refactoringFound(project, "extract.method", extractMethodCandidateGroups.size());
                 });
             }

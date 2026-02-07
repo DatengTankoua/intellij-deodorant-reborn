@@ -1,16 +1,37 @@
 package org.jetbrains.research.intellijdeodorant.ide.fus;
 
-import com.intellij.internal.statistic.eventLog.*;
-
+/**
+ * KOMPATIBILITÄT FIX für IntelliJ 2025.2+
+ * 
+ * Die originalen FUS (Feature Usage Statistics) APIs wurden geändert/entfernt in IntelliJ 2025.2.
+ * Diese Klasse wurde in eine No-Op Implementation umgewandelt, die keine Statistiken sammelt,
+ * aber die Kompatibilität mit dem existierenden Code bewahrt.
+ * 
+ * HINWEIS: Statistiken sind optional und nicht kritisch für die Plugin-Funktionalität.
+ * Das Plugin funktioniert vollständig ohne sie.
+ */
 public class IntelliJDeodorantLogger {
-    static final StatisticsEventLoggerProvider loggerProvider = StatisticsEventLoggerKt.getEventLogProvider("DBP");
-    static public final Integer version = loggerProvider.getVersion();
+    // Version als konstante Zahl statt von loggerProvider abzurufen
+    static public final Integer version = 1;
 
-    static public void log(EventLogGroup group, String action) {
-        loggerProvider.getLogger().log(group, action, false);
+    /**
+     * No-Op Implementation - macht nichts, wirft keine Exceptions
+     * 
+     * @param group Event log group (wird ignoriert)
+     * @param action Action name (wird ignoriert)
+     */
+    static public void log(Object group, String action) {
+        // No-op: Statistiken sind deaktiviert für Kompatibilität
     }
 
-    static public void log(EventLogGroup group, String action, FeatureUsageData data) {
-        loggerProvider.getLogger().log(group, action, data.build(), false);
+    /**
+     * No-Op Implementation - macht nichts, wirft keine Exceptions
+     * 
+     * @param group Event log group (wird ignoriert)
+     * @param action Action name (wird ignoriert)
+     * @param data Feature usage data (wird ignoriert)
+     */
+    static public void log(Object group, String action, Object data) {
+        // No-op: Statistiken sind deaktiviert für Kompatibilität
     }
 }

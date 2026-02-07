@@ -10,6 +10,8 @@ public class TypeCheckEliminationGroup implements Comparable<TypeCheckEliminatio
     private int groupSizeAtSystemLevel;
     private double averageGroupSizeAtClassLevel;
     private double averageNumberOfStatementsInGroup;
+    
+    private String cachedToString = null;
 
     public TypeCheckEliminationGroup() {
         this.candidates = new ArrayList<>();
@@ -116,6 +118,28 @@ public class TypeCheckEliminationGroup implements Comparable<TypeCheckEliminatio
     }
 
     public String toString() {
+        // Use the cache if available to avoid PSI access during UI rendering
+        if (cachedToString != null) {
+            return cachedToString;
+        }
+        
+        // If no cache, compute within a read action
+        // This can happen if the object was not properly initialized
+        return com.intellij.openapi.application.ReadAction.compute(() -> computeToString());
+    }
+    
+    /*
+     *calculates and caches the string representation.
+     * MUST be called within a read action!
+     */
+    public void cacheToString() {
+        cachedToString = computeToString();
+    }
+    
+    /*
+    *calculates the string representation of this refactoring group.
+     */
+    private String computeToString() {
         Set<String> constantVariables = this.getConstantVariables();
         if (constantVariables != null)
             return "constant variables: " + constantVariables;
