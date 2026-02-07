@@ -8,7 +8,6 @@ import com.intellij.ui.JBColor;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.research.intellijdeodorant.ide.refactoring.moveMethod.MoveMethodRefactoring;
 import org.jetbrains.research.intellijdeodorant.IntelliJDeodorantBundle;
-import org.jetbrains.research.intellijdeodorant.utils.PsiUtils;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;

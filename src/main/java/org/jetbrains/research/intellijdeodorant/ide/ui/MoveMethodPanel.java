@@ -4,7 +4,6 @@ import com.intellij.analysis.AnalysisScope;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.EditorHelper;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
