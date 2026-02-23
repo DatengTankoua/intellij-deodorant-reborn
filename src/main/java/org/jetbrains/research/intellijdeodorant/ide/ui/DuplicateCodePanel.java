@@ -389,7 +389,7 @@ public class DuplicateCodePanel extends JPanel {
                     
                     // PMD Detector konfigurieren
                     PMDDuplicateCodeDetector detector = new PMDDuplicateCodeDetector();
-                    detector.setMinimumTileSize(25); // Standard: 25 Tokens
+                    detector.setMinimumTileSize(60); // Standard: 60 Tokens
 
                     // AKTIVIERE strukturelle Duplikat-Erkennung
                     detector.setIgnoreIdentifiers(true);  // Namen ignorieren
