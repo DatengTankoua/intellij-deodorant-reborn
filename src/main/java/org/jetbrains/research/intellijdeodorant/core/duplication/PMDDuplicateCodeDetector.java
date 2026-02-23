@@ -1,5 +1,6 @@
 package org.jetbrains.research.intellijdeodorant.core.duplication;
 
+import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
@@ -18,15 +19,16 @@ import org.jetbrains.research.intellijdeodorant.core.distance.ProjectInfo;
 import org.jetbrains.research.intellijdeodorant.utils.DuplicateRangeAdjuster;
 
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.*;
 
 /**
- * Implementiert Duplicate Code Detection mittels PMD's Copy-Paste Detector (CPD).
+ * Implementiert Duplicate Code Detection mittels PMD's Copy-Paste Detector (CPD) v7.7.0.
  * 
  * CPD verwendet einen token-basierten Ansatz:
  * 1. Code wird in Tokens zerlegt (Whitespace/Kommentare ignoriert)
  * 2. Token-Sequenzen werden verglichen
- * 3. Duplikate werden identifiziert wenn >= X Tokens identisch sind
+ * 3. Duplikate werden identifiziert wenn sie mindestens eine bestimmte Anzahl von Tokens identisch sind
  * 
  * @author IntelliJDeodorant Team
  * @version 2.0
@@ -36,8 +38,7 @@ public class PMDDuplicateCodeDetector {
     private static final Logger LOG = Logger.getInstance(PMDDuplicateCodeDetector.class);
     
     // Konfigurations-Parameter
-    private int minimumTileSize = 50;  // Minimum tokens für Duplikat
-    private boolean skipLexicalErrors = true;
+    private int minimumTileSize = 60;  // Minimum tokens für Duplikat
     private boolean ignoreAnnotations = true;
     private boolean ignoreIdentifiers = false;
     private boolean ignoreLiterals = false;
@@ -50,8 +51,8 @@ public class PMDDuplicateCodeDetector {
     }
     
     public void setMinimumTileSize(int minimumTileSize) {
-        if (minimumTileSize < 10) {
-            LOG.warn("minimumTileSize < 10 kann zu vielen False Positives führen");
+        if (minimumTileSize < 50) {
+            LOG.warn("minimumTileSize < 50 kann zu vielen False Positives führen");
         }
         this.minimumTileSize = minimumTileSize;
     }
@@ -76,7 +77,6 @@ public class PMDDuplicateCodeDetector {
         try {
             // CPD konfigurieren
             CPDConfiguration config = createCPDConfiguration();
-            CPD cpd = new CPD(config);
             
             // Alle Java-Dateien hinzufügen
             List<VirtualFile> javaFiles = collectJavaFiles(projectInfo, indicator);
@@ -90,6 +90,7 @@ public class PMDDuplicateCodeDetector {
             indicator.setText("Analyzing " + javaFiles.size() + " files...");
             
             // Dateien zu CPD hinzufügen
+            List<String> filePaths = new ArrayList<>();
             for (int i = 0; i < javaFiles.size(); i++) {
                 if (indicator.isCanceled()) {
                     LOG.info("Analysis cancelled by user");
@@ -100,16 +101,18 @@ public class PMDDuplicateCodeDetector {
                 indicator.setFraction((double) i / javaFiles.size());
                 indicator.setText2("Processing: " + file.getName());
                 
-                addFileToCPD(cpd, file);
+                addFileToCPD(config, file);
+                filePaths.add(file.getPath());
             }
             
             // CPD-Analyse durchführen
             indicator.setText("Running CPD analysis...");
-            cpd.go();
-            
-            // Ergebnisse verarbeiten
-            indicator.setText("Processing results...");
-            groups = processMatches(cpd.getMatches(), projectInfo.getProject());
+            CpdAnalysis cpd = CpdAnalysis.create(config);
+            cpd.performAnalysis(report -> {
+                // Ergebnisse verarbeiten
+                indicator.setText("Processing results...");
+                groups.addAll(processMatches(report.getMatches().iterator(), projectInfo.getProject()));
+            });
             
             LOG.info("Duplicate code detection completed. Found " + groups.size() + " duplicate groups");
             
@@ -124,8 +127,6 @@ public class PMDDuplicateCodeDetector {
     private CPDConfiguration createCPDConfiguration() {
         CPDConfiguration config = new CPDConfiguration();
         config.setMinimumTileSize(minimumTileSize);
-        config.setLanguage(new JavaLanguage());
-        config.setSkipLexicalErrors(skipLexicalErrors);
         config.setIgnoreAnnotations(ignoreAnnotations);
         config.setIgnoreIdentifiers(ignoreIdentifiers);
         config.setIgnoreLiterals(ignoreLiterals);
@@ -163,22 +164,15 @@ public class PMDDuplicateCodeDetector {
         });
     }
     
-    private void addFileToCPD(@NotNull CPD cpd, @NotNull VirtualFile file) {
+    /**
+     * Fügt eine Datei zu CPD hinzu.
+     * 
+     * @param config CPD-Configuration
+     * @param file VirtualFile
+     */
+    private void addFileToCPD(@NotNull CPDConfiguration config, @NotNull VirtualFile file) {
         try {
-            String path = file.getPath();
-            String content = ReadAction.compute(() -> {
-                try {
-                    return new String(file.contentsToByteArray(), file.getCharset());
-                } catch (IOException e) {
-                    LOG.warn("Could not read file: " + file.getPath(), e);
-                    return "";
-                }
-            });
-            
-            if (!content.isEmpty()) {
-                cpd.add(new SourceCode(new SourceCode.StringCodeLoader(content, path)));
-            }
-            
+            config.addInputPath(Paths.get(file.getPath()));
         } catch (Exception e) {
             LOG.warn("Error adding file to CPD: " + file.getPath(), e);
         }
@@ -186,6 +180,10 @@ public class PMDDuplicateCodeDetector {
     
     /**
      * Verarbeitet CPD-Matches und konvertiert zu DuplicateCodeGroups.
+     * 
+     * @param matches Iterator über CPD-Matches
+     * @param project IntelliJ Project
+     * @return Set von DuplicateCodeGroups
      */
     @NotNull
     private Set<DuplicateCodeGroup> processMatches(@NotNull Iterator<Match> matches,
@@ -207,10 +205,10 @@ public class PMDDuplicateCodeDetector {
             LOG.info("  Line Count: " + match.getLineCount());
             
             int markIndex = 0;
-            for (Mark mark : match.getMarkSet()) {
+            for (Mark mark : match) {
                 markIndex++;
-                LOG.info("    Mark #" + markIndex + ": " + mark.getFilename() + 
-                        " [" + mark.getBeginLine() + "-" + mark.getEndLine() + "]");
+                LOG.info("    Mark #" + markIndex + ": " + mark.getLocation().getFileId().getAbsolutePath() + 
+                        " [" + mark.getLocation().getStartLine() + "-" + mark.getLocation().getEndLine() + "]");
             }
             
             try {
@@ -266,9 +264,9 @@ public class PMDDuplicateCodeDetector {
                                                           int tokenCount) {
         return ReadAction.compute(() -> {
             try {
-                String filePath = mark.getFilename();
-                int startLine = mark.getBeginLine();
-                int endLine = mark.getEndLine();
+                String filePath = mark.getLocation().getFileId().getAbsolutePath();
+                int startLine = mark.getLocation().getStartLine();
+                int endLine = mark.getLocation().getEndLine();
                 
                 // Finde PsiFile
                 VirtualFile virtualFile = findVirtualFile(filePath);
@@ -305,8 +303,8 @@ public class PMDDuplicateCodeDetector {
                 PsiMethod endMethod = PsiTreeUtil.getParentOfType(endElement, PsiMethod.class);
                 
                 boolean isCompleteMethod = startMethod != null && startMethod == endMethod &&
-                    startMethod.getTextRange().getStartOffset() <= startOffset &&
-                    startMethod.getTextRange().getEndOffset() >= endOffset;
+                    startMethod.getTextRange().getStartOffset() == startOffset &&
+                    startMethod.getTextRange().getEndOffset() == endOffset;
                 
                 //Ist der Bereich innerhalb EINER Methode?
                 boolean isWithinSingleMethod = startMethod != null && startMethod == endMethod;

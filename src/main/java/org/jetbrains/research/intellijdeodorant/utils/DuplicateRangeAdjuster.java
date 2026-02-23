@@ -52,10 +52,10 @@ public class DuplicateRangeAdjuster {
             // Finde alle Methoden, die vom PMD-Bereich berührt werden
             List<PsiMethod> affectedMethods = findAffectedMethods(psiFile, startOffset, endOffset);
             
-            // Prüfe ob der Bereich eine vollständige Methode enthält (≥80% Coverage)
+            // Prüfe ob der Bereich eine vollständige Methode enthält (100% Coverage)
             for (PsiMethod method : affectedMethods) {
                 double coverage = calculateMethodCoverage(method, startOffset, endOffset);
-                if (coverage >= 0.8) {
+                if (coverage == 1.0) {
                     // Vollständige Methode gefunden - verwende nur den Body
                     PsiCodeBlock body = method.getBody();
                     return body != null ? body : method;
