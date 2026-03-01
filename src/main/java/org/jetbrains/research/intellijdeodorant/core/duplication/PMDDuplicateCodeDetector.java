@@ -1,24 +1,21 @@
 package org.jetbrains.research.intellijdeodorant.core.duplication;
 
-import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.psi.PsiDocumentManager;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiManager;
-import com.intellij.psi.PsiMethod;
+import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.refactoring.extractMethod.ExtractMethodProcessor;
+
 import net.sourceforge.pmd.cpd.*;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.research.intellijdeodorant.core.distance.ProjectInfo;
 import org.jetbrains.research.intellijdeodorant.utils.DuplicateRangeAdjuster;
 
-import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
 
@@ -139,29 +136,61 @@ public class PMDDuplicateCodeDetector {
         return config;
     }
     
+    /**
+     * Sammelt alle Java-Dateien aus dem Projekt.
+     * Ignoriert Test-Dateien und andere ausgeschlossene Dateien.
+     */
     @NotNull
     private List<VirtualFile> collectJavaFiles(@NotNull ProjectInfo projectInfo,
                                                 @NotNull ProgressIndicator indicator) {
         return ReadAction.compute(() -> {
             List<VirtualFile> javaFiles = new ArrayList<>();
+            int ignoredCount = 0;
             
             // Alle Klassen durchgehen und deren Dateien sammeln
-            projectInfo.getClasses().forEach(psiClass -> {
+            for (com.intellij.psi.PsiClass psiClass : projectInfo.getClasses()) {
                 if (indicator.isCanceled()) {
-                    return;
+                    break;
                 }
                 
                 PsiFile containingFile = psiClass.getContainingFile();
                 if (containingFile != null) {
                     VirtualFile virtualFile = containingFile.getVirtualFile();
                     if (virtualFile != null && !javaFiles.contains(virtualFile)) {
-                        javaFiles.add(virtualFile);
+                        // Prüfe ob Datei ignoriert werden soll
+                        if (shouldIgnoreFile(virtualFile)) {
+                            ignoredCount++;
+                            LOG.debug("Ignoring file: " + virtualFile.getPath());
+                        } else {
+                            javaFiles.add(virtualFile);
+                        }
                     }
                 }
-            });
+            }
             
+            LOG.info("Collected " + javaFiles.size() + " Java files (ignored " + ignoredCount + " test/generated files)");
             return javaFiles;
         });
+    }
+
+    /**
+     * Prüft ob eine Datei ignoriert werden soll.
+     */
+    private boolean shouldIgnoreFile(@NotNull VirtualFile file) {
+        String path = file.getPath();        
+        // Test-Verzeichnisse
+        if (path.contains("/test/") || path.contains("\\test\\")) {
+            return true;
+        }
+        
+        // Generierte Dateien
+        if (path.contains("/target/") || path.contains("\\target\\") ||
+            path.contains("/build/") || path.contains("\\build\\") ||
+            path.contains("/generated/") || path.contains("\\generated\\")) {
+            return true;
+        }
+        
+        return false;
     }
     
     /**
@@ -193,6 +222,7 @@ public class PMDDuplicateCodeDetector {
         
         int matchCount = 0;
         int validGroupCount = 0;
+        int mergedGroupCount = 0;
         
         while (matches.hasNext()) {
             Match match = matches.next();
@@ -212,16 +242,29 @@ public class PMDDuplicateCodeDetector {
             }
             
             try {
-                DuplicateCodeGroup group = createGroupFromMatch(match, psiManager);
-                LOG.info("  Created group with " + group.getOccurrences() + " occurrences");
+                DuplicateCodeGroup newGroup = createGroupFromMatch(match, psiManager);
+                LOG.info("  Created group with " + newGroup.getOccurrences() + " occurrences");
                 
-                if (group.getOccurrences() >= 2) {
-                    groups.add(group);
-                    validGroupCount++;
-                    LOG.info("  Group added (valid)");
+                if (newGroup.getOccurrences() >= 2) {
+                    // Prüfe ob eines der Fragmente bereits in einer existierenden Gruppe ist
+                    DuplicateCodeGroup existingGroup = findGroupContainingAnyFragment(groups, newGroup);
+                    
+                    if (existingGroup != null) {
+                        // Merge: Füge alle Fragmente der neuen Gruppe zur existierenden hinzu
+                        for (DuplicateCodeFragment fragment : newGroup.getFragments()) {
+                            existingGroup.addFragment(fragment);
+                        }
+                        mergedGroupCount++;
+                        LOG.info("  Group merged into existing group (now " + existingGroup.getOccurrences() + " occurrences)");
+                    } else {
+                        // Neue Gruppe hinzufügen
+                        groups.add(newGroup);
+                        validGroupCount++;
+                        LOG.info("  Group added (valid)");
+                    }
                 } else {
-                    LOG.info(group.toString());
-                    LOG.info(group.getFirstFragment().toString());
+                    LOG.info(newGroup.toString());
+                    LOG.info(newGroup.getFirstFragment().toString());
                     LOG.info("  Group rejected (< 2 occurrences)");
                 }
             } catch (Exception e) {
@@ -232,8 +275,153 @@ public class PMDDuplicateCodeDetector {
         LOG.info("=== SUMMARY ===");
         LOG.info("Total matches found by PMD: " + matchCount);
         LOG.info("Valid groups created: " + validGroupCount);
+        LOG.info("Groups merged: " + mergedGroupCount);
+        
+        // Validiere Variablentypen und Code-Struktur
+        int removedByTypeCheck = validateGroups(groups, this::extractVariableTypesFromLines, "type");
+        int removedByStructureCheck = validateGroups(groups, (f, p) -> extractCodeSignature(f), "structure");
+        
+        LOG.info("Fragments removed due to type incompatibility: " + removedByTypeCheck);
+        LOG.info("Fragments removed due to structure incompatibility: " + removedByStructureCheck);
+        
+        // Entferne Gruppen mit zu wenigen Fragmenten, nicht refactorable oder zu kurzen Fragmenten
+        groups.removeIf(group -> group.getOccurrences() < 2 || !isRefactorable(group.getFirstFragment()) || group.getFirstFragment().getLineCount() < 7);
         
         return groups;
+    }
+
+    /**
+     * Findet eine existierende Gruppe, die eines der Fragmente der neuen Gruppe enthält.
+     */
+    @Nullable
+    private DuplicateCodeGroup findGroupContainingAnyFragment(@NotNull Set<DuplicateCodeGroup> existingGroups,
+                                                               @NotNull DuplicateCodeGroup newGroup) {
+        for (DuplicateCodeFragment newFragment : newGroup.getFragments()) {
+            for (DuplicateCodeGroup existingGroup : existingGroups) {
+                for (DuplicateCodeFragment existingFragment : existingGroup.getFragments()) {
+                    if (newFragment.equals(existingFragment)) {
+                        return existingGroup;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+     /**
+     * Functional Interface für Fragment-Validierung.
+     */
+    @FunctionalInterface
+    private interface FragmentExtractor {
+        Object extract(DuplicateCodeFragment fragment, PsiFile psiFile);
+    }
+
+    /**
+     * Generische Validierungsmethode mit Mehrheitsprinzip.
+     * Extrahiert Eigenschaften aus Fragmenten, findet Mehrheit, entfernt Ausreißer.
+     */
+    private int validateGroups(@NotNull Set<DuplicateCodeGroup> groups,
+                               @NotNull FragmentExtractor extractor,
+                               @NotNull String validationType) {
+        int removedCount = 0;
+        
+        for (DuplicateCodeGroup group : groups) {
+            if (group.getOccurrences() < 2) continue;
+            
+            // 1. Sammle Eigenschaften aus ALLEN Fragmenten
+            Map<Object, Integer> propertyCounts = new HashMap<>();
+            Map<DuplicateCodeFragment, Object> fragmentProperties = new HashMap<>();
+            
+            for (DuplicateCodeFragment fragment : group.getFragments()) {
+                Object property = ReadAction.compute(() -> extractor.extract(fragment, fragment.getFile()));
+                fragmentProperties.put(fragment, property);
+                propertyCounts.merge(property, 1, Integer::sum);
+            }
+            
+            // 2. Finde Mehrheits-Eigenschaft
+            Object majorityProperty = propertyCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+            
+            if (majorityProperty == null) continue;
+            
+            // 3. Entferne Fragmente mit abweichender Eigenschaft
+            for (Map.Entry<DuplicateCodeFragment, Object> entry : fragmentProperties.entrySet()) {
+                if (!entry.getValue().equals(majorityProperty)) {
+                    group.removeFragment(entry.getKey());
+                    removedCount++;
+                    LOG.info("Removing fragment with incompatible " + validationType + ": " + 
+                            entry.getKey().getLocationString());
+                }
+            }
+        }
+        
+        return removedCount;
+    }
+
+    /**
+     * Extrahiert Code-Signatur aus gespeicherten Statements.
+     */
+    @NotNull
+    private String extractCodeSignature(@NotNull DuplicateCodeFragment fragment) {
+        PsiElement[] statements = fragment.getStatements();
+        if (statements == null || statements.length == 0) return "";
+        
+        StringBuilder signature = new StringBuilder();
+        for (PsiElement stmt : statements) {
+            // Sammle alle Child-Elemente
+            PsiTreeUtil.processElements(stmt, element -> {
+                if (element instanceof PsiMethodCallExpression) {
+                    PsiMethod method = ((PsiMethodCallExpression) element).resolveMethod();
+                    if (method != null) {
+                        int paramCount = ((PsiMethodCallExpression) element).getArgumentList().getExpressionCount();
+                        signature.append("M:").append(method.getName()).append(":").append(paramCount).append(";");
+                    }
+                } else if (element instanceof PsiBinaryExpression) {
+                    signature.append("OP:").append(((PsiBinaryExpression) element).getOperationTokenType()).append(";");
+                } else if (element instanceof PsiAssignmentExpression) {
+                    signature.append("A;");
+                }
+                return true;
+            });
+        }
+        return signature.toString();
+    }
+    
+    /**
+     * Extrahiert Variablentypen aus gespeicherten Statements (ohne Namen).
+     */
+    @NotNull
+    private String extractVariableTypesFromLines(@NotNull DuplicateCodeFragment fragment, @NotNull PsiFile psiFile) {
+        PsiElement[] statements = fragment.getStatements();
+        if (statements == null || statements.length == 0) return "";
+        
+        List<String> types = new ArrayList<>();
+        for (PsiElement stmt : statements) {
+            // Sammle Variablen aus allen Child-Elementen
+            PsiTreeUtil.processElements(stmt, element -> {
+                if (element instanceof PsiReferenceExpression) {
+                    PsiElement resolved = ((PsiReferenceExpression) element).resolve();
+                    if (resolved instanceof PsiVariable) {
+                        addVariableType(types, (PsiVariable) resolved);
+                    }
+                } else if (element instanceof PsiVariable) {
+                    addVariableType(types, (PsiVariable) element);
+                }
+                return true;
+            });
+        }
+        
+        Collections.sort(types);
+        return String.join(";", types);
+    }
+
+    private void addVariableType(List<String> typeList, PsiVariable var) {
+        PsiType type = var.getType();
+        if (type != null) {
+            typeList.add(type.getCanonicalText());
+        }
     }
     
     /**
@@ -246,7 +434,7 @@ public class PMDDuplicateCodeDetector {
         DuplicateCodeGroup group = new DuplicateCodeGroup(tokenCount);
         
         // Alle Markierungen (Occurrences) durchgehen
-        for (Mark mark : match.getMarkSet()) {
+        for (Mark mark : match) {
             DuplicateCodeFragment fragment = createFragmentFromMark(mark, psiManager, tokenCount);
             if (fragment != null) {
                 group.addFragment(fragment);
@@ -287,93 +475,36 @@ public class PMDDuplicateCodeDetector {
                     return null;
                 }
                 
-                int startOffset = document.getLineStartOffset(startLine - 1);
-                int endOffset = document.getLineEndOffset(endLine - 1);
+                // Verwende DuplicateRangeAdjuster für konsistente Statement-Extraktion
+                DuplicateRangeAdjuster.AdjustedRange adjustedRange = DuplicateRangeAdjuster.adjustRangeWithLines(
+                    psiFile, document, startLine, endLine
+                );
                 
-                PsiElement startElement = psiFile.findElementAt(startOffset);
-                PsiElement endElement = psiFile.findElementAt(endOffset);
-                
-                if (startElement == null || endElement == null) {
-                    LOG.warn("Could not find PSI elements for range: " + filePath + " [" + startLine + "-" + endLine + "]");
+                if (adjustedRange == null) {
+                    LOG.warn("Could not adjust range for: " + filePath + " [" + startLine + "-" + endLine + "]");
                     return null;
                 }
                 
-                //Ist der Bereich bereits eine komplette Methode?
-                PsiMethod startMethod = PsiTreeUtil.getParentOfType(startElement, PsiMethod.class);
-                PsiMethod endMethod = PsiTreeUtil.getParentOfType(endElement, PsiMethod.class);
+                // Erstelle Fragment mit angepassten Werten
+                DuplicateCodeFragment fragment = new DuplicateCodeFragment(
+                    psiFile, 
+                    adjustedRange.getStartLine(), 
+                    adjustedRange.getEndLine(), 
+                    tokenCount, 
+                    adjustedRange.getCode()
+                );
+                fragment.setStatements(adjustedRange.getStatements());
                 
-                boolean isCompleteMethod = startMethod != null && startMethod == endMethod &&
-                    startMethod.getTextRange().getStartOffset() == startOffset &&
-                    startMethod.getTextRange().getEndOffset() == endOffset;
+                LOG.debug("Created fragment: " + filePath + " [" + adjustedRange.getStartLine() + "-" + adjustedRange.getEndLine() + 
+                         "] with " + adjustedRange.getStatements().length + " statements");
                 
-                //Ist der Bereich innerhalb EINER Methode?
-                boolean isWithinSingleMethod = startMethod != null && startMethod == endMethod;
-                
-                //Hat der Bereich balanced Braces?
-                String pmdCode = extractCode(psiFile, startLine, endLine);
-                boolean hasBalancedBraces = isBalanced(pmdCode);
-                
-                //PMD direkt verwenden oder adjustieren?
-                boolean usePmdDirectly = (isCompleteMethod || (isWithinSingleMethod && hasBalancedBraces));
-                
-                if (usePmdDirectly) {
-                    //PMD-Bereich ist bereits refaktorierbar → direkt verwenden
-                    LOG.debug("Using PMD range directly: " + filePath + " [" + startLine + "-" + endLine + "]");
-                    
-                    DuplicateCodeFragment fragment = new DuplicateCodeFragment(
-                        psiFile, startLine, endLine, tokenCount, pmdCode
-                    );
-                    fragment.setPsiElement(startElement);
-                    return fragment;
-                    
-                } else {
-                    //PMD-Bereich ist problematisch → Adjuster verwenden
-                    LOG.debug("Adjusting PMD range: " + filePath + " [" + startLine + "-" + endLine + "]" +
-                        " (isCompleteMethod=" + isCompleteMethod + ", isWithinSingleMethod=" + isWithinSingleMethod + 
-                        ", hasBalancedBraces=" + hasBalancedBraces + ")");
-                    
-                    // Verwende IMMER DuplicateRangeAdjuster für konsistente Statement-Extraktion
-                    DuplicateRangeAdjuster.AdjustedRange adjustedRange = DuplicateRangeAdjuster.adjustRangeWithLines(
-                        psiFile, document, startLine, endLine
-                    );
-                    
-                    if (adjustedRange == null) {
-                        LOG.warn("Could not adjust range for: " + filePath + " [" + startLine + "-" + endLine + "]");
-                        return null;
-                    }
-                    
-                    int adjustedStartLine = document.getLineNumber(adjustedRange.getElement().getTextRange().getStartOffset()) + 1;
-                    int adjustedEndLine = document.getLineNumber(adjustedRange.getElement().getTextRange().getEndOffset()) + 1;
-                    
-                    String code = adjustedRange.getCode();
-                    DuplicateCodeFragment fragment = new DuplicateCodeFragment(
-                        psiFile, adjustedStartLine, adjustedEndLine, tokenCount, code
-                    );
-                    fragment.setPsiElement(adjustedRange.getElement());
-                    
-                    return fragment;
-                }
+                return fragment;
                 
             } catch (Exception e) {
                 LOG.warn("Error creating fragment from mark", e);
                 return null;
             }
         });
-    }
-    
-    /**
-     * Prüft ob ein Code-String balanced Braces hat (gleiche Anzahl { und }).
-     */
-    private boolean isBalanced(@NotNull String code) {
-        int openCount = 0;
-        int closeCount = 0;
-        
-        for (char c : code.toCharArray()) {
-            if (c == '{') openCount++;
-            else if (c == '}') closeCount++;
-        }
-        
-        return openCount == closeCount;
     }
     
     /**
@@ -415,5 +546,31 @@ public class PMDDuplicateCodeDetector {
                ", ignoreLiterals=" + ignoreLiterals +
                ", ignoreAnnotations=" + ignoreAnnotations +
                '}';
+    }
+
+    /**
+     * Prüft ob Fragment refactoring-fähig ist (via ExtractMethodProcessor).
+     */
+    private boolean isRefactorable(@NotNull DuplicateCodeFragment fragment) {
+        return ReadAction.compute(() -> {
+            try {
+                PsiFile psiFile = fragment.getFile();
+                if (psiFile == null) return false;
+                
+                // Nutze die bereits extrahierten Statements
+                PsiElement[] statements = fragment.getStatements();
+                if (statements == null || statements.length == 0) return false;
+                
+                ExtractMethodProcessor processor = new ExtractMethodProcessor(
+                    psiFile.getProject(), null, 
+                    statements,
+                    null, "RefactoringTest", null, null
+                );
+                
+                return processor.prepare();
+            } catch (Exception e) {
+                return false;
+            }
+        });
     }
 }
