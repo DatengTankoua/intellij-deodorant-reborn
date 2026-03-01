@@ -332,23 +332,24 @@ public class PMDDuplicateCodeDetector {
                         " (isCompleteMethod=" + isCompleteMethod + ", isWithinSingleMethod=" + isWithinSingleMethod + 
                         ", hasBalancedBraces=" + hasBalancedBraces + ")");
                     
-                    PsiElement adjustedElement = DuplicateRangeAdjuster.adjustRange(
+                    // Verwende IMMER DuplicateRangeAdjuster für konsistente Statement-Extraktion
+                    DuplicateRangeAdjuster.AdjustedRange adjustedRange = DuplicateRangeAdjuster.adjustRangeWithLines(
                         psiFile, document, startLine, endLine
                     );
                     
-                    if (adjustedElement == null) {
+                    if (adjustedRange == null) {
                         LOG.warn("Could not adjust range for: " + filePath + " [" + startLine + "-" + endLine + "]");
                         return null;
                     }
                     
-                    int adjustedStartLine = document.getLineNumber(adjustedElement.getTextRange().getStartOffset()) + 1;
-                    int adjustedEndLine = document.getLineNumber(adjustedElement.getTextRange().getEndOffset()) + 1;
+                    int adjustedStartLine = document.getLineNumber(adjustedRange.getElement().getTextRange().getStartOffset()) + 1;
+                    int adjustedEndLine = document.getLineNumber(adjustedRange.getElement().getTextRange().getEndOffset()) + 1;
                     
-                    String code = adjustedElement.getText();
+                    String code = adjustedRange.getCode();
                     DuplicateCodeFragment fragment = new DuplicateCodeFragment(
                         psiFile, adjustedStartLine, adjustedEndLine, tokenCount, code
                     );
-                    fragment.setPsiElement(adjustedElement);
+                    fragment.setPsiElement(adjustedRange.getElement());
                     
                     return fragment;
                 }
