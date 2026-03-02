@@ -384,16 +384,11 @@ public class DuplicateCodePanel extends JPanel {
                 indicator.setText("Initializing duplicate code detection...");
                 
                 try {
-                    // ProjectInfo erstellen - MUSS in ReadAction sein!
+                    // ProjectInfo erstellen
                     ProjectInfo projectInfo = ReadAction.compute(() -> new ProjectInfo(currentScope, false));
                     
                     // PMD Detector konfigurieren
                     PMDDuplicateCodeDetector detector = new PMDDuplicateCodeDetector();
-                    detector.setMinimumTileSize(60); // Standard: 60 Tokens
-
-                    // AKTIVIERE strukturelle Duplikat-Erkennung
-                    detector.setIgnoreIdentifiers(true);  // Namen ignorieren
-                    detector.setIgnoreLiterals(true);    
                     
                     // Duplikate detektieren
                     groups = detector.detectDuplicates(projectInfo, indicator);

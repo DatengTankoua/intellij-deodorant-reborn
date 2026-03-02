@@ -7,6 +7,7 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
+import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.refactoring.extractMethod.ExtractMethodProcessor;
 
@@ -37,8 +38,14 @@ public class PMDDuplicateCodeDetector {
     // Konfigurations-Parameter
     private int minimumTileSize = 60;  // Minimum tokens für Duplikat
     private boolean ignoreAnnotations = true;
-    private boolean ignoreIdentifiers = false;
-    private boolean ignoreLiterals = false;
+    private boolean ignoreIdentifiers = true;
+    private boolean ignoreLiterals = true;
+
+    // Cache für Detection-Ergebnisse
+    private Set<DuplicateCodeGroup> cachedResults = null;
+    private long lastModificationCount = -1;
+    private int lastAnalyzedFileCount = -1;
+    private int lastMinimumTileSize = -1;
     
     /**
      * Erstellt einen neuen PMDDuplicateCodeDetector mit Standard-Konfiguration.
@@ -51,21 +58,51 @@ public class PMDDuplicateCodeDetector {
         if (minimumTileSize < 50) {
             LOG.warn("minimumTileSize < 50 kann zu vielen False Positives führen");
         }
-        this.minimumTileSize = minimumTileSize;
+        
+        if (this.minimumTileSize != minimumTileSize) {
+            this.minimumTileSize = minimumTileSize;
+            invalidateCache();
+        }
     }
     
     public void setIgnoreIdentifiers(boolean ignoreIdentifiers) {
-        this.ignoreIdentifiers = ignoreIdentifiers;
+        if (this.ignoreIdentifiers != ignoreIdentifiers) {
+            this.ignoreIdentifiers = ignoreIdentifiers;
+            invalidateCache();
+        }
     }
     
     public void setIgnoreLiterals(boolean ignoreLiterals) {
-        this.ignoreLiterals = ignoreLiterals;
+        if (this.ignoreLiterals != ignoreLiterals) {
+            this.ignoreLiterals = ignoreLiterals;
+            invalidateCache();
+        }
     }
     
     @NotNull
     public Set<DuplicateCodeGroup> detectDuplicates(@NotNull ProjectInfo projectInfo,
                                                      @NotNull ProgressIndicator indicator) {
         LOG.info("Starting duplicate code detection with minimumTileSize=" + minimumTileSize);
+
+        // Prüfe ob Cache verwendet werden kann
+        Project project = projectInfo.getProject();
+        long currentModificationCount = project.getService(PsiModificationTracker.class).getModificationCount();
+        List<VirtualFile> javaFiles = collectJavaFiles(projectInfo, indicator);
+        int currentFileCount = javaFiles.size();
+        
+        if (cachedResults != null && 
+            lastModificationCount == currentModificationCount &&
+            lastAnalyzedFileCount == currentFileCount &&
+            lastMinimumTileSize == minimumTileSize) {
+            LOG.info("Using cached duplicate code detection results (" + cachedResults.size() + " groups)");
+            indicator.setText("Using cached results...");
+            return new HashSet<>(cachedResults); // Return defensive copy
+        }
+        
+        LOG.info("Cache miss - performing full analysis");
+        LOG.info("  Modification count: " + lastModificationCount + " -> " + currentModificationCount);
+        LOG.info("  File count: " + lastAnalyzedFileCount + " -> " + currentFileCount);
+        LOG.info("  Tile size: " + lastMinimumTileSize + " -> " + minimumTileSize);
         
         indicator.setText("Initializing PMD CPD...");
         
@@ -75,8 +112,6 @@ public class PMDDuplicateCodeDetector {
             // CPD konfigurieren
             CPDConfiguration config = createCPDConfiguration();
             
-            // Alle Java-Dateien hinzufügen
-            List<VirtualFile> javaFiles = collectJavaFiles(projectInfo, indicator);
             LOG.info("Found " + javaFiles.size() + " Java files to analyze");
             
             if (javaFiles.isEmpty()) {
@@ -112,12 +147,31 @@ public class PMDDuplicateCodeDetector {
             });
             
             LOG.info("Duplicate code detection completed. Found " + groups.size() + " duplicate groups");
+
+            // Cache die Ergebnisse für zukünftige Aufrufe
+            cachedResults = new HashSet<>(groups);
+            lastModificationCount = currentModificationCount;
+            lastAnalyzedFileCount = currentFileCount;
+            lastMinimumTileSize = minimumTileSize;
+            LOG.info("Results cached for future use");
             
         } catch (Exception e) {
             LOG.error("Error during duplicate code detection", e);
         }
         
         return groups;
+    }
+
+    /**
+     * Diese Methode kann aufgerufen werden wenn man sicher ist dass sich etwas geändert hat, 
+     * das die bisherigen Ergebnisse ungültig macht (z.B. Konfigurationsänderung, manuelles Invalidate).
+     */
+    public void invalidateCache() {
+        cachedResults = null;
+        lastModificationCount = -1;
+        lastAnalyzedFileCount = -1;
+        lastMinimumTileSize = -1;
+        LOG.info("Cache invalidated - next detection will perform full analysis");
     }
     
     @NotNull
