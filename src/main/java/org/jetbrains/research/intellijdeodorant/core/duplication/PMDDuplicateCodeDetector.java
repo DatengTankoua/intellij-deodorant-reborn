@@ -467,7 +467,6 @@ public class PMDDuplicateCodeDetector {
             });
         }
         
-        Collections.sort(types);
         return String.join(";", types);
     }
 
