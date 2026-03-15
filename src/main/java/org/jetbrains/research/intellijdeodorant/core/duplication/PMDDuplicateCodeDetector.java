@@ -294,15 +294,16 @@ public class PMDDuplicateCodeDetector {
                 LOG.info("    Mark #" + markIndex + ": " + mark.getLocation().getFileId().getAbsolutePath() + 
                         " [" + mark.getLocation().getStartLine() + "-" + mark.getLocation().getEndLine() + "]");
             }
-            
+
             try {
-                DuplicateCodeGroup newGroup = createGroupFromMatch(match, psiManager);
-                LOG.info("  Created group with " + newGroup.getOccurrences() + " occurrences");
-                
-                if (newGroup.getOccurrences() >= 2) {
+                List<DuplicateCodeGroup> newGroups = createGroupsFromMatch(match, psiManager);
+                LOG.info("  Created " + newGroups.size() + " group(s) from match");
+
+                for (DuplicateCodeGroup newGroup : newGroups) {
+                    LOG.info("  Group with " + newGroup.getOccurrences() + " occurrences");
                     // Prüfe ob eines der Fragmente bereits in einer existierenden Gruppe ist
                     DuplicateCodeGroup existingGroup = findGroupContainingAnyFragment(groups, newGroup);
-                    
+
                     if (existingGroup != null) {
                         // Merge: Füge alle Fragmente der neuen Gruppe zur existierenden hinzu
                         for (DuplicateCodeFragment fragment : newGroup.getFragments()) {
@@ -311,15 +312,10 @@ public class PMDDuplicateCodeDetector {
                         mergedGroupCount++;
                         LOG.info("  Group merged into existing group (now " + existingGroup.getOccurrences() + " occurrences)");
                     } else {
-                        // Neue Gruppe hinzufügen
                         groups.add(newGroup);
                         validGroupCount++;
                         LOG.info("  Group added (valid)");
                     }
-                } else {
-                    LOG.info(newGroup.toString());
-                    LOG.info(newGroup.getFirstFragment().toString());
-                    LOG.info("  Group rejected (< 2 occurrences)");
                 }
             } catch (Exception e) {
                 LOG.warn("Error processing match", e);
@@ -478,32 +474,54 @@ public class PMDDuplicateCodeDetector {
     }
     
     /**
-     * Erstellt eine DuplicateCodeGroup aus einem CPD-Match.
+     * Erstellt pro Methoden-Schnitt eine eigene DuplicateCodeGroup aus einem CPD-Match.
+     * @param match      CPD-Match
+     * @param psiManager PSI-Manager
+     * @return Liste von Gruppen (eine pro Methoden-Position)
      */
     @NotNull
-    private DuplicateCodeGroup createGroupFromMatch(@NotNull Match match,
-                                                     @NotNull PsiManager psiManager) {
+    private List<DuplicateCodeGroup> createGroupsFromMatch(@NotNull Match match,
+                                                            @NotNull PsiManager psiManager) {
         int tokenCount = match.getTokenCount();
-        DuplicateCodeGroup group = new DuplicateCodeGroup(tokenCount);
-        
-        // Alle Markierungen (Occurrences) durchgehen
+
+        // Pro Mark die zugehörigen Sub-Fragmente ermitteln
+        List<List<DuplicateCodeFragment>> fragmentsPerMark = new ArrayList<>();
         for (Mark mark : match) {
-            DuplicateCodeFragment fragment = createFragmentFromMark(mark, psiManager, tokenCount);
-            if (fragment != null) {
-                group.addFragment(fragment);
+            fragmentsPerMark.add(createFragmentsFromMark(mark, psiManager, tokenCount));
+        }
+
+        // i-te Sub-Fragmente aller Marks → eigene Gruppe
+        int maxSplits = fragmentsPerMark.stream().mapToInt(List::size).max().orElse(0);
+        List<DuplicateCodeGroup> groups = new ArrayList<>();
+        for (int i = 0; i < maxSplits; i++) {
+            DuplicateCodeGroup group = new DuplicateCodeGroup(tokenCount);
+            for (List<DuplicateCodeFragment> frags : fragmentsPerMark) {
+                if (i < frags.size()) {
+                    group.addFragment(frags.get(i));
+                }
+            }
+            if (group.getOccurrences() >= 2) {
+                groups.add(group);
             }
         }
-        
-        return group;
+        return groups;
     }
     
     /**
-     * Erstellt ein DuplicateCodeFragment aus einer CPD-Mark.
+     * Erstellt DuplicateCodeFragments aus einer CPD-Mark.
+     * Berührt das Mark mehrere Fragmente, wird pro Fragment ein eigenes DuplicateCodeFragment erstellt.
+     *
+     * @param mark       CPD-Mark
+     * @param psiManager PSI-Manager
+     * @param tokenCount Anzahl Tokens für dieses Match
+     * @return Liste von Fragmenten
      */
-    private DuplicateCodeFragment createFragmentFromMark(@NotNull Mark mark,
-                                                          @NotNull PsiManager psiManager,
-                                                          int tokenCount) {
+    @NotNull
+    private List<DuplicateCodeFragment> createFragmentsFromMark(@NotNull Mark mark,
+                                                                  @NotNull PsiManager psiManager,
+                                                                  int tokenCount) {
         return ReadAction.compute(() -> {
+            List<DuplicateCodeFragment> fragments = new ArrayList<>();
             try {
                 String filePath = mark.getLocation().getFileId().getAbsolutePath();
                 int startLine = mark.getLocation().getStartLine();
@@ -513,49 +531,44 @@ public class PMDDuplicateCodeDetector {
                 VirtualFile virtualFile = findVirtualFile(filePath);
                 if (virtualFile == null) {
                     LOG.warn("Could not find VirtualFile for: " + filePath);
-                    return null;
+                    return fragments;
                 }
                 
                 PsiFile psiFile = psiManager.findFile(virtualFile);
                 if (psiFile == null) {
                     LOG.warn("Could not find PsiFile for: " + filePath);
-                    return null;
+                    return fragments;
                 }
                 
                 Document document = PsiDocumentManager.getInstance(psiFile.getProject()).getDocument(psiFile);
                 if (document == null) {
                     LOG.warn("Document not found for file: " + filePath);
-                    return null;
+                    return fragments;
                 }
                 
-                // Verwende DuplicateRangeAdjuster für konsistente Statement-Extraktion
-                DuplicateRangeAdjuster.AdjustedRange adjustedRange = DuplicateRangeAdjuster.adjustRangeWithLines(
-                    psiFile, document, startLine, endLine
-                );
-                
-                if (adjustedRange == null) {
-                    LOG.warn("Could not adjust range for: " + filePath + " [" + startLine + "-" + endLine + "]");
-                    return null;
+                // Pro überschnittener Methode einen eigenen Refactoring-Kandidaten erstellen
+                for (DuplicateRangeAdjuster.AdjustedRange adjustedRange :
+                        DuplicateRangeAdjuster.adjustRangeWithLines(psiFile, document, startLine, endLine)) {
+                    DuplicateCodeFragment fragment = new DuplicateCodeFragment(
+                        psiFile,
+                        adjustedRange.startLine,
+                        adjustedRange.endLine,
+                        tokenCount,
+                        adjustedRange.code
+                    );
+                    fragment.setStatements(adjustedRange.statements);
+                    LOG.debug("Created fragment: " + filePath + " [" + adjustedRange.startLine + "-" + adjustedRange.endLine +
+                             "] with " + adjustedRange.statements.length + " statements");
+                    fragments.add(fragment);
                 }
-                
-                // Erstelle Fragment mit angepassten Werten
-                DuplicateCodeFragment fragment = new DuplicateCodeFragment(
-                    psiFile, 
-                    adjustedRange.getStartLine(), 
-                    adjustedRange.getEndLine(), 
-                    tokenCount, 
-                    adjustedRange.getCode()
-                );
-                fragment.setStatements(adjustedRange.getStatements());
-                
-                LOG.debug("Created fragment: " + filePath + " [" + adjustedRange.getStartLine() + "-" + adjustedRange.getEndLine() + 
-                         "] with " + adjustedRange.getStatements().length + " statements");
-                
-                return fragment;
-                
+                if (fragments.isEmpty()) {
+                    LOG.warn("No fragments adjusted for: " + filePath + " [" + startLine + "-" + endLine + "]");
+                }
+                return fragments;
+
             } catch (Exception e) {
-                LOG.warn("Error creating fragment from mark", e);
-                return null;
+                LOG.warn("Error creating fragments from mark", e);
+                return fragments;
             }
         });
     }

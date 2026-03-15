@@ -35,57 +35,42 @@ public class DuplicateRangeAdjuster {
             this.endLine = endLine;
             this.code = code;
         }
-        
-        @NotNull public PsiStatement[] getStatements() { return statements; }
-        @NotNull public PsiElement getElement() { return statements.length > 0 ? statements[0] : null; }
-        public int getStartLine() { return startLine; }
-        public int getEndLine() { return endLine; }
-        @NotNull public String getCode() { return code; }
     }
     
-    /**
-     * Passt PMD-Duplikat-Bereich an refaktorierbare PSI-Strukturen an.
-     * Findet relevante Methode, extrahiert Statements ohne Signatur/Klammern.
-     * 
-     * @param psiFile PSI-Datei
-     * @param document Zugehöriges Document
-     * @param startLine Start-Zeile (1-basiert)
-     * @param endLine End-Zeile (1-basiert, inklusiv)
-     * @return AdjustedRange oder null
+   /**
+     * Gibt pro überschnittener Methode einen AdjustedRange zurück.
+     * Berührt ein CPD-Fragment zwei Methoden, entstehen zwei Refactoring-Kandidaten.
+     *
+     * @param psiFile   PSI-Datei
+     * @param document  Zugehöriges Document
+     * @param startLine Start-Zeile
+     * @param endLine   End-Zeile
+     * @return Liste von AdjustedRanges
      */
-    @Nullable
-    public static AdjustedRange adjustRangeWithLines(@NotNull PsiFile psiFile,
-                                                      @NotNull Document document,
-                                                      int startLine,
-                                                      int endLine) {
+    @NotNull
+    public static List<AdjustedRange> adjustRangeWithLines(@NotNull PsiFile psiFile,
+                                                            @NotNull Document document,
+                                                            int startLine,
+                                                            int endLine) {
+        List<AdjustedRange> result = new ArrayList<>();
         try {
             int startOffset = document.getLineStartOffset(startLine - 1);
-            int endOffset = document.getLineEndOffset(endLine - 1);
-            
-            PsiElement startElement = psiFile.findElementAt(startOffset);
-            PsiElement endElement = psiFile.findElementAt(endOffset);
-            
-            if (startElement == null || endElement == null) return null;
-            
-            // Finde relevante Methode (einzelne oder dominante)
-            PsiMethod targetMethod = findRelevantMethod(psiFile, startOffset, endOffset);
-            if (targetMethod == null) return null;
-            
-            // Extrahiere Statements
-            return extractStatementsFromMethod(psiFile, document, targetMethod, startOffset, endOffset);
-            
-        } catch (Exception e) {
-            return null;
-        }
+            int endOffset   = document.getLineEndOffset(endLine - 1);
+            for (PsiMethod method : findOverlappingMethods(psiFile, startOffset, endOffset)) {
+                PsiCodeBlock body = method.getBody();
+                if (body != null) {
+                    result.addAll(extractRangesFromBlock(psiFile, document, body, startOffset, endOffset));
+                }
+            }
+        } catch (Exception ignored) {}
+        return result;
     }
     
-    /**
-     * Findet relevante Methode: einzelne betroffene oder dominante Methode.
-     */
-    @Nullable
-    private static PsiMethod findRelevantMethod(@NotNull PsiFile psiFile, int startOffset, int endOffset) {
+    /** Sammelt alle Methoden, die den [startOffset, endOffset]-Bereich überschneiden. */
+    @NotNull
+    private static List<PsiMethod> findOverlappingMethods(@NotNull PsiFile psiFile,
+                                                           int startOffset, int endOffset) {
         List<PsiMethod> methods = new ArrayList<>();
-        
         psiFile.accept(new JavaRecursiveElementVisitor() {
             @Override
             public void visitMethod(@NotNull PsiMethod method) {
@@ -96,75 +81,89 @@ public class DuplicateRangeAdjuster {
                 }
             }
         });
-        
-        if (methods.isEmpty()) return null;
-        if (methods.size() == 1) return methods.get(0);
-        
-        // Finde dominante Methode (größte Überschneidung)
-        PsiMethod dominant = null;
-        int maxOverlap = 0;
-        
-        for (PsiMethod method : methods) {
-            PsiCodeBlock body = method.getBody();
-            if (body == null) continue;
-            
-            TextRange bodyRange = body.getTextRange();
-            int overlap = Math.max(0, 
-                Math.min(endOffset, bodyRange.getEndOffset()) - 
-                Math.max(startOffset, bodyRange.getStartOffset()));
-            
-            if (overlap > maxOverlap) {
-                maxOverlap = overlap;
-                dominant = method;
-            }
-        }
-        
-        return dominant;
+        return methods;
     }
     
     /**
-     * Extrahiert Statements aus Methode basierend auf PMD-Bereich.
+     * Extrahiert AdjustedRanges aus einem PsiCodeBlock rekursiv.
+     *
+     * Regel: Überschreitet ein Statement die CPD-Grenze UND hat es einen inneren Block
+     * (z.B. Schleifen-Rumpf), wird in diesen Block abgestiegen statt das ganze Statement
+     * aufzunehmen. So entsteht pro Schleife/Block ein eigener AdjustedRange.
      */
-    @Nullable
-    private static AdjustedRange extractStatementsFromMethod(@NotNull PsiFile psiFile,
-                                                              @NotNull Document document,
-                                                              @NotNull PsiMethod method,
-                                                              int startOffset,
-                                                              int endOffset) {
-        PsiCodeBlock body = method.getBody();
-        if (body == null) return null;
-        
-        // Begrenze auf Method-Body
-        TextRange bodyRange = body.getTextRange();
-        int adjustedStart = Math.max(startOffset, bodyRange.getStartOffset());
-        int adjustedEnd = Math.min(endOffset, bodyRange.getEndOffset());
-        
-        // Filtere Statements im PMD-Bereich
-        List<PsiStatement> statementsInRange = new ArrayList<>();
-        for (PsiStatement stmt : body.getStatements()) {
-            TextRange stmtRange = stmt.getTextRange();
-            if (stmtRange.getEndOffset() > adjustedStart && stmtRange.getStartOffset() < adjustedEnd) {
-                statementsInRange.add(stmt);
+    @NotNull
+    private static List<AdjustedRange> extractRangesFromBlock(@NotNull PsiFile psiFile,
+                                                               @NotNull Document document,
+                                                               @NotNull PsiCodeBlock block,
+                                                               int startOffset,
+                                                               int endOffset) {
+        TextRange blockRange = block.getTextRange();
+        int adjStart = Math.max(startOffset, blockRange.getStartOffset());
+        int adjEnd   = Math.min(endOffset,   blockRange.getEndOffset());
+
+        List<AdjustedRange> result      = new ArrayList<>();
+        List<PsiStatement>  accumulated = new ArrayList<>();
+
+        for (PsiStatement stmt : block.getStatements()) {
+            TextRange sr = stmt.getTextRange();
+            if (sr.getEndOffset() <= adjStart || sr.getStartOffset() >= adjEnd) continue;
+
+            boolean crossesBoundary = sr.getStartOffset() < adjStart || sr.getEndOffset() > adjEnd;
+            PsiCodeBlock inner = getInnerBlock(stmt);
+
+            if (crossesBoundary && inner != null) {
+                // Flush bisher gesammelte Statements als eigenen Range
+                AdjustedRange flushed = buildRange(psiFile, document, accumulated);
+                if (flushed != null) result.add(flushed);
+                accumulated.clear();
+                // Abstieg in den inneren Block
+                result.addAll(extractRangesFromBlock(psiFile, document, inner, startOffset, endOffset));
+            } else {
+                accumulated.add(stmt);
             }
         }
-        
-        if (statementsInRange.isEmpty()) return null;
-        
-        // Berechne finalen Bereich
-        PsiStatement first = statementsInRange.get(0);
-        PsiStatement last = statementsInRange.get(statementsInRange.size() - 1);
-        
-        int resultStartOffset = first.getTextRange().getStartOffset();
-        int resultEndOffset = last.getTextRange().getEndOffset();
-        
-        int resultStartLine = document.getLineNumber(resultStartOffset) + 1;
-        int resultEndLine = document.getLineNumber(resultEndOffset) + 1;
-        
-        String code = psiFile.getText().substring(resultStartOffset, resultEndOffset);
-        
-        // Konvertiere zu Array
-        PsiStatement[] statementsArray = statementsInRange.toArray(new PsiStatement[0]);
-        
-        return new AdjustedRange(statementsArray, resultStartLine, resultEndLine, code);
+
+        AdjustedRange flushed = buildRange(psiFile, document, accumulated);
+        if (flushed != null) result.add(flushed);
+        return result;
+    }
+
+    /**
+     * Gibt den inneren PsiCodeBlock eines Statements zurück, falls vorhanden.
+     */
+    @Nullable
+    private static PsiCodeBlock getInnerBlock(@NotNull PsiStatement stmt) {
+        try {
+            PsiStatement body = null;
+            if (stmt instanceof PsiBlockStatement)   return ((PsiBlockStatement) stmt).getCodeBlock();
+            if (stmt instanceof PsiTryStatement)     return ((PsiTryStatement) stmt).getTryBlock();
+            if (stmt instanceof PsiForStatement)     body = ((PsiForStatement) stmt).getBody();
+            if (stmt instanceof PsiForeachStatement) body = ((PsiForeachStatement) stmt).getBody();
+            if (stmt instanceof PsiWhileStatement)   body = ((PsiWhileStatement) stmt).getBody();
+            if (stmt instanceof PsiDoWhileStatement) body = ((PsiDoWhileStatement) stmt).getBody();
+            if (stmt instanceof PsiIfStatement)      body = ((PsiIfStatement) stmt).getThenBranch();
+            if (body instanceof PsiBlockStatement)   return ((PsiBlockStatement) body).getCodeBlock();
+            return null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /** Baut einen AdjustedRange aus einer Liste von Statements. */
+    @Nullable
+    private static AdjustedRange buildRange(@NotNull PsiFile psiFile,
+                                             @NotNull Document document,
+                                             @NotNull List<PsiStatement> statements) {
+        if (statements.isEmpty()) return null;
+        PsiStatement first = statements.get(0);
+        PsiStatement last  = statements.get(statements.size() - 1);
+        int rStart = first.getTextRange().getStartOffset();
+        int rEnd   = last.getTextRange().getEndOffset();
+        return new AdjustedRange(
+            statements.toArray(new PsiStatement[0]),
+            document.getLineNumber(rStart) + 1,
+            document.getLineNumber(rEnd)   + 1,
+            psiFile.getText().substring(rStart, rEnd)
+        );
     }
 }
