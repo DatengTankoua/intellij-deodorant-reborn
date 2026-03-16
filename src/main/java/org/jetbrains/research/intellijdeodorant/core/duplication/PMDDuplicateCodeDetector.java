@@ -327,15 +327,8 @@ public class PMDDuplicateCodeDetector {
         LOG.info("Valid groups created: " + validGroupCount);
         LOG.info("Groups merged: " + mergedGroupCount);
         
-        // Validiere Variablentypen und Code-Struktur
-        int removedByTypeCheck = validateGroups(groups, this::extractVariableTypesFromLines, "type");
-        int removedByStructureCheck = validateGroups(groups, (f, p) -> extractCodeSignature(f), "structure");
-        
-        LOG.info("Fragments removed due to type incompatibility: " + removedByTypeCheck);
-        LOG.info("Fragments removed due to structure incompatibility: " + removedByStructureCheck);
-        
-        // Entferne Gruppen mit zu wenigen Fragmenten, nicht refactorable oder zu kurzen Fragmenten
-        groups.removeIf(group -> group.getOccurrences() < 2 || !isRefactorable(group.getFirstFragment()) || group.getFirstFragment().getLineCount() < 7);
+        // Validierung: Typen, Struktur, Output-Variablen, Kontrollfluss, Extrahierbarkeit
+        DuplicateCodeValidator.validate(groups);
         
         return groups;
     }
@@ -356,121 +349,6 @@ public class PMDDuplicateCodeDetector {
             }
         }
         return null;
-    }
-
-     /**
-     * Functional Interface für Fragment-Validierung.
-     */
-    @FunctionalInterface
-    private interface FragmentExtractor {
-        Object extract(DuplicateCodeFragment fragment, PsiFile psiFile);
-    }
-
-    /**
-     * Generische Validierungsmethode mit Mehrheitsprinzip.
-     * Extrahiert Eigenschaften aus Fragmenten, findet Mehrheit, entfernt Ausreißer.
-     */
-    private int validateGroups(@NotNull Set<DuplicateCodeGroup> groups,
-                               @NotNull FragmentExtractor extractor,
-                               @NotNull String validationType) {
-        int removedCount = 0;
-        
-        for (DuplicateCodeGroup group : groups) {
-            if (group.getOccurrences() < 2) continue;
-            
-            // 1. Sammle Eigenschaften aus ALLEN Fragmenten
-            Map<Object, Integer> propertyCounts = new HashMap<>();
-            Map<DuplicateCodeFragment, Object> fragmentProperties = new HashMap<>();
-            
-            for (DuplicateCodeFragment fragment : group.getFragments()) {
-                Object property = ReadAction.compute(() -> extractor.extract(fragment, fragment.getFile()));
-                fragmentProperties.put(fragment, property);
-                propertyCounts.merge(property, 1, Integer::sum);
-            }
-            
-            // 2. Finde Mehrheits-Eigenschaft
-            Object majorityProperty = propertyCounts.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse(null);
-            
-            if (majorityProperty == null) continue;
-            
-            // 3. Entferne Fragmente mit abweichender Eigenschaft
-            for (Map.Entry<DuplicateCodeFragment, Object> entry : fragmentProperties.entrySet()) {
-                if (!entry.getValue().equals(majorityProperty)) {
-                    group.removeFragment(entry.getKey());
-                    removedCount++;
-                    LOG.info("Removing fragment with incompatible " + validationType + ": " + 
-                            entry.getKey().getLocationString());
-                }
-            }
-        }
-        
-        return removedCount;
-    }
-
-    /**
-     * Extrahiert Code-Signatur aus gespeicherten Statements.
-     */
-    @NotNull
-    private String extractCodeSignature(@NotNull DuplicateCodeFragment fragment) {
-        PsiElement[] statements = fragment.getStatements();
-        if (statements == null || statements.length == 0) return "";
-        
-        StringBuilder signature = new StringBuilder();
-        for (PsiElement stmt : statements) {
-            // Sammle alle Child-Elemente
-            PsiTreeUtil.processElements(stmt, element -> {
-                if (element instanceof PsiMethodCallExpression) {
-                    PsiMethod method = ((PsiMethodCallExpression) element).resolveMethod();
-                    if (method != null) {
-                        int paramCount = ((PsiMethodCallExpression) element).getArgumentList().getExpressionCount();
-                        signature.append("M:").append(method.getName()).append(":").append(paramCount).append(";");
-                    }
-                } else if (element instanceof PsiBinaryExpression) {
-                    signature.append("OP:").append(((PsiBinaryExpression) element).getOperationTokenType()).append(";");
-                } else if (element instanceof PsiAssignmentExpression) {
-                    signature.append("A;");
-                }
-                return true;
-            });
-        }
-        return signature.toString();
-    }
-    
-    /**
-     * Extrahiert Variablentypen aus gespeicherten Statements (ohne Namen).
-     */
-    @NotNull
-    private String extractVariableTypesFromLines(@NotNull DuplicateCodeFragment fragment, @NotNull PsiFile psiFile) {
-        PsiElement[] statements = fragment.getStatements();
-        if (statements == null || statements.length == 0) return "";
-        
-        List<String> types = new ArrayList<>();
-        for (PsiElement stmt : statements) {
-            // Sammle Variablen aus allen Child-Elementen
-            PsiTreeUtil.processElements(stmt, element -> {
-                if (element instanceof PsiReferenceExpression) {
-                    PsiElement resolved = ((PsiReferenceExpression) element).resolve();
-                    if (resolved instanceof PsiVariable) {
-                        addVariableType(types, (PsiVariable) resolved);
-                    }
-                } else if (element instanceof PsiVariable) {
-                    addVariableType(types, (PsiVariable) element);
-                }
-                return true;
-            });
-        }
-        
-        return String.join(";", types);
-    }
-
-    private void addVariableType(List<String> typeList, PsiVariable var) {
-        PsiType type = var.getType();
-        if (type != null) {
-            typeList.add(type.getCanonicalText());
-        }
     }
     
     /**
@@ -612,31 +490,5 @@ public class PMDDuplicateCodeDetector {
                ", ignoreLiterals=" + ignoreLiterals +
                ", ignoreAnnotations=" + ignoreAnnotations +
                '}';
-    }
-
-    /**
-     * Prüft ob Fragment refactoring-fähig ist (via ExtractMethodProcessor).
-     */
-    private boolean isRefactorable(@NotNull DuplicateCodeFragment fragment) {
-        return ReadAction.compute(() -> {
-            try {
-                PsiFile psiFile = fragment.getFile();
-                if (psiFile == null) return false;
-                
-                // Nutze die bereits extrahierten Statements
-                PsiElement[] statements = fragment.getStatements();
-                if (statements == null || statements.length == 0) return false;
-                
-                ExtractMethodProcessor processor = new ExtractMethodProcessor(
-                    psiFile.getProject(), null, 
-                    statements,
-                    null, "RefactoringTest", null, null
-                );
-                
-                return processor.prepare();
-            } catch (Exception e) {
-                return false;
-            }
-        });
     }
 }
