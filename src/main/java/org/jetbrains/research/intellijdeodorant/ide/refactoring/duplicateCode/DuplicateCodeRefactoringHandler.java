@@ -248,35 +248,16 @@ public class DuplicateCodeRefactoringHandler {
         DuplicateCodeFragment firstFragment = context.fragments.get(0);
         
         ReadAction.run(() -> {
-            PsiElement element = firstFragment.getPsiElement();
-            if (element == null) {
-                showError("Could not access PSI element");
+            PsiElement[] statements = firstFragment.getStatements();
+            
+            if (statements == null || statements.length == 0) {
+                showError("No statements found to extract");
                 return;
             }
             
-            PsiClass sourceClass = PsiTreeUtil.getParentOfType(element, PsiClass.class);
+            PsiClass sourceClass = PsiTreeUtil.getParentOfType(statements[0], PsiClass.class);
             if (sourceClass == null) {
                 showError("Could not find containing class");
-                return;
-            }
-            
-            List<PsiStatement> statementsToExtract;
-            
-            if (element instanceof PsiMethod) {
-                PsiCodeBlock body = ((PsiMethod) element).getBody();
-                if (body != null) {
-                    statementsToExtract = Arrays.asList(body.getStatements());
-                } else {
-                    statementsToExtract = new ArrayList<>();
-                }
-            } else if (element instanceof PsiCodeBlock) {
-                statementsToExtract = Arrays.asList(((PsiCodeBlock) element).getStatements());
-            } else {
-                statementsToExtract = collectStatementsFromFragment(firstFragment);
-            }
-            
-            if (statementsToExtract.isEmpty()) {
-                showError("No statements found to extract");
                 return;
             }
             
@@ -286,7 +267,7 @@ public class DuplicateCodeRefactoringHandler {
             ExtractMethodProcessor processor = new ExtractMethodProcessor(
                 project,
                 editor,
-                statementsToExtract.toArray(new PsiElement[0]),
+                statements,
                 null,
                 IntelliJDeodorantBundle.message("duplicated.code.refactoring.name"),
                 "",
@@ -295,30 +276,11 @@ public class DuplicateCodeRefactoringHandler {
             
             processor.setTargetClass(sourceClass);
             
-            if (strategy != RefactoringStrategy.WITHIN_CLASS) {
-                info("=== CONFIGURING DUPLICATE DETECTION ===");
-                debug("Affected classes: " + context.affectedClasses.size());
-                for (PsiClass cls : context.affectedClasses) {
-                    debug("  - " + cls.getQualifiedName());
-                }
-            }
-            
             try {
                 processor.setShowErrorDialogs(true);
                 if (processor.prepare()) {
                     ApplicationManager.getApplication().invokeLater(() -> {
-                        ExtractMethodHandler.invokeOnElements(
-                            project,
-                            processor,
-                            file,
-                            true
-                        );
-                        
-                        if (strategy != RefactoringStrategy.WITHIN_CLASS) {
-                            ApplicationManager.getApplication().invokeLater(() -> {
-                                applyCrossFileStrategy(context, strategy, processor);
-                            }, com.intellij.openapi.application.ModalityState.NON_MODAL);
-                        }
+                        ExtractMethodHandler.invokeOnElements(project, processor, file, true);
                     });
                 } else {
                     showError("Cannot prepare extract method refactoring. The code may have compilation errors.");

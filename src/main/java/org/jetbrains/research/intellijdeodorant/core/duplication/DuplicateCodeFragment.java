@@ -22,7 +22,7 @@ import java.util.Objects;
  * - Die Datei, in der das Duplikat gefunden wurde
  * - Start- und End-Zeile des Duplikats
  * - Anzahl der Tokens (für Similarity-Berechnung)
- * - Das zugehörige PsiElement
+ * - Die zugehörigen PSI-Statements
  * 
  * @author IntelliJDeodorant Team
  * @version 2.0
@@ -34,7 +34,7 @@ public class DuplicateCodeFragment {
     private final int endLine;
     private final int tokens;
     private final String code;
-    private PsiElement psiElement;
+    private PsiElement[] statements;
     
     
     public DuplicateCodeFragment(@NotNull PsiFile file, 
@@ -80,13 +80,41 @@ public class DuplicateCodeFragment {
         return code;
     }
     
-    public void setPsiElement(@Nullable PsiElement element) {
-        this.psiElement = element;
+    public void setStatements(@NotNull PsiElement[] statements) {
+        this.statements = statements;
     }
     
+    /**
+     * Gibt alle zugehörigen PSI-Statements zurück.
+     * 
+     * @return PSI-Statement Array oder null
+     */
+    @Nullable
+    public PsiElement[] getStatements() {
+        return statements;
+    }
+
+    @Nullable
+    public void setPsiElement(@Nullable PsiElement psiElement) {
+        if (psiElement != null) {
+            if (this.statements == null || this.statements.length == 0) {
+                this.statements = new PsiElement[]{psiElement};
+            } else {
+                this.statements[0] = psiElement;
+            }
+        } else {
+            this.statements = null;
+        }
+    }
+
+     /**
+     * Gibt das erste PSI-Statement zurück (für Legacy-Kompatibilität).
+     * 
+     * @return Erstes PSI-Statement oder null
+     */
     @Nullable
     public PsiElement getPsiElement() {
-        return psiElement;
+        return (statements != null && statements.length > 0) ? statements[0] : null;
     }
     
     @NotNull
@@ -106,16 +134,16 @@ public class DuplicateCodeFragment {
         );
     }
     
-    @NotNull
+     @NotNull
     public String getClassName() {
         return ReadAction.compute(() -> {
-            if (psiElement == null) {
+            if (statements == null || statements.length == 0) {
                 return "<unknown>";
             }
             
             // Finde die umschließende Klasse
             PsiClass containingClass = PsiTreeUtil.getParentOfType(
-                psiElement, 
+                statements[0], 
                 PsiClass.class
             );
             

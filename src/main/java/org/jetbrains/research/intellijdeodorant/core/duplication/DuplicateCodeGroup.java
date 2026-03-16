@@ -40,6 +40,10 @@ public class DuplicateCodeGroup {
             fragments.add(fragment);
         }
     }
+
+    public boolean removeFragment(@NotNull DuplicateCodeFragment fragment) {
+        return fragments.remove(fragment);
+    }
     
     @NotNull
     public List<DuplicateCodeFragment> getFragments() {

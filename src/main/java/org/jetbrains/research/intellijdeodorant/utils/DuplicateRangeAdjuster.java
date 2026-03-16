@@ -12,375 +12,158 @@ import java.util.List;
 
 /**
  * Passt PMD-basierte Duplikat-Bereiche an valide PSI-Strukturen an.
- * 
- * INSPIRIERT VON JDeodorant:
- * - Verwendet strukturelle Validierung statt reiner Token-Matching
- * - Verhindert das Mergen benachbarter Methoden (Hauptproblem)
- * - Respektiert Methoden-Grenzen strikt
- * - Erweitert nur auf vollständige Statements innerhalb EINER Methode
- * 
- * WICHTIGE REGEL:
- * - Wenn PMD-Bereich MEHRERE Methoden überschneidet → KEINE Anpassung
- * - Wenn PMD-Bereich innerhalb EINER Methode → Statement-basierte Anpassung
+ * Verhindert Mergen benachbarter Methoden, respektiert Methoden-Grenzen,
+ * erweitert nur auf vollständige Statements innerhalb EINER Methode.
  * 
  * @author IntelliJDeodorant Team
- * @see <a href="https://github.com/tsantalis/JDeodorant">JDeodorant CloneInstanceMapper</a>
  */
 public class DuplicateRangeAdjuster {
     
     /**
-     * Passt einen PMD-Duplikat-Bereich an refaktorierbare PSI-Strukturen an.
+     * Wrapper für angepasste Bereiche mit aktualisierten Zeilen.
+     * Speichert ALLE Statements im Bereich, nicht nur das erste.
      */
-    @Nullable
-    public static PsiElement adjustRange(@NotNull PsiFile psiFile,
-                                         @NotNull Document document,
-                                         int startLine,
-                                         int endLine) {
-        try {
-            // Konvertiere Zeilen zu Offsets (0-basiert für PSI)
-            int startOffset = document.getLineStartOffset(startLine - 1);
-            int endOffset = document.getLineEndOffset(endLine - 1);
-            
-            // Finde Elemente an Start und Ende
-            PsiElement startElement = psiFile.findElementAt(startOffset);
-            PsiElement endElement = psiFile.findElementAt(endOffset);
-            
-            if (startElement == null || endElement == null) {
-                return null;
-            }
-            
-            // Finde alle Methoden, die vom PMD-Bereich berührt werden
-            List<PsiMethod> affectedMethods = findAffectedMethods(psiFile, startOffset, endOffset);
-            
-            // Prüfe ob der Bereich eine vollständige Methode enthält (100% Coverage)
-            for (PsiMethod method : affectedMethods) {
-                double coverage = calculateMethodCoverage(method, startOffset, endOffset);
-                if (coverage == 1.0) {
-                    // Vollständige Methode gefunden - verwende nur den Body
-                    PsiCodeBlock body = method.getBody();
-                    return body != null ? body : method;
-                }
-            }
-            
-            // Finde die dominante Methode (größter Anteil am Fragment)
-            PsiMethod dominantMethod = findDominantMethod(affectedMethods, startOffset, endOffset);
-            
-            if (dominantMethod != null) {
-                // Fragment auf die dominante Methode beschränken
-                PsiCodeBlock methodBody = dominantMethod.getBody();
-                if (methodBody != null) {
-                    // Begrenze Fragment auf Methoden-Grenzen
-                    int methodStart = methodBody.getTextRange().getStartOffset();
-                    int methodEnd = methodBody.getTextRange().getEndOffset();
-                    
-                    int adjustedStart = Math.max(startOffset, methodStart);
-                    int adjustedEnd = Math.min(endOffset, methodEnd);
-                    
-                    // Finde Statement-Grenzen innerhalb der Methode
-                    PsiElement adjustedStartElement = psiFile.findElementAt(adjustedStart);
-                    PsiElement adjustedEndElement = psiFile.findElementAt(adjustedEnd);
-                    
-                    if (adjustedStartElement != null && adjustedEndElement != null) {
-                        PsiElement result = expandToCompleteStatements(
-                            psiFile, adjustedStartElement, adjustedEndElement
-                        );
-                        
-                        // Prüfe auf balanced Braces
-                        if (result != null && hasBalancedBraces(result.getText())) {
-                            return result;
-                        }
-                    }
-                }
-            }
-            
-            // Fallback: Verwende commonParent ohne Methoden-Expansion
-            PsiElement commonParent = PsiTreeUtil.findCommonParent(startElement, endElement);
-            return expandToCompleteStatementsOnly(psiFile, startElement, endElement, commonParent);
-            
-        } catch (Exception e) {
-            return null;
+    public static class AdjustedRange {
+        public final PsiStatement[] statements;
+        public final int startLine;
+        public final int endLine;
+        public final String code;
+        
+        public AdjustedRange(@NotNull PsiStatement[] statements, int startLine, int endLine, @NotNull String code) {
+            this.statements = statements;
+            this.startLine = startLine;
+            this.endLine = endLine;
+            this.code = code;
         }
     }
     
-    /**
-     * Findet alle Methoden, die vom gegebenen Offset-Bereich berührt werden.
+   /**
+     * Gibt pro überschnittener Methode einen AdjustedRange zurück.
+     * Berührt ein CPD-Fragment zwei Methoden, entstehen zwei Refactoring-Kandidaten.
+     *
+     * @param psiFile   PSI-Datei
+     * @param document  Zugehöriges Document
+     * @param startLine Start-Zeile
+     * @param endLine   End-Zeile
+     * @return Liste von AdjustedRanges
      */
     @NotNull
-    private static List<PsiMethod> findAffectedMethods(@NotNull PsiFile psiFile, 
-                                                        int startOffset, 
-                                                        int endOffset) {
+    public static List<AdjustedRange> adjustRangeWithLines(@NotNull PsiFile psiFile,
+                                                            @NotNull Document document,
+                                                            int startLine,
+                                                            int endLine) {
+        List<AdjustedRange> result = new ArrayList<>();
+        try {
+            int startOffset = document.getLineStartOffset(startLine - 1);
+            int endOffset   = document.getLineEndOffset(endLine - 1);
+            for (PsiMethod method : findOverlappingMethods(psiFile, startOffset, endOffset)) {
+                PsiCodeBlock body = method.getBody();
+                if (body != null) {
+                    result.addAll(extractRangesFromBlock(psiFile, document, body, startOffset, endOffset));
+                }
+            }
+        } catch (Exception ignored) {}
+        return result;
+    }
+    
+    /** Sammelt alle Methoden, die den [startOffset, endOffset]-Bereich überschneiden. */
+    @NotNull
+    private static List<PsiMethod> findOverlappingMethods(@NotNull PsiFile psiFile,
+                                                           int startOffset, int endOffset) {
         List<PsiMethod> methods = new ArrayList<>();
-        
         psiFile.accept(new JavaRecursiveElementVisitor() {
             @Override
             public void visitMethod(@NotNull PsiMethod method) {
                 super.visitMethod(method);
-                
-                TextRange methodRange = method.getTextRange();
-                // Prüfe auf Überschneidung
-                if (methodRange.getStartOffset() < endOffset && 
-                    methodRange.getEndOffset() > startOffset) {
+                TextRange range = method.getTextRange();
+                if (range.getStartOffset() < endOffset && range.getEndOffset() > startOffset) {
                     methods.add(method);
                 }
             }
         });
-        
         return methods;
     }
     
     /**
-     * Findet die dominante Methode (Methode mit größtem Anteil am Fragment).
-     */
-    @Nullable
-    private static PsiMethod findDominantMethod(@NotNull List<PsiMethod> methods,
-                                                 int startOffset,
-                                                 int endOffset) {
-        PsiMethod dominant = null;
-        int maxOverlap = 0;
-        
-        for (PsiMethod method : methods) {
-            PsiCodeBlock body = method.getBody();
-            if (body == null) continue;
-            
-            TextRange bodyRange = body.getTextRange();
-            int bodyStart = bodyRange.getStartOffset();
-            int bodyEnd = bodyRange.getEndOffset();
-            
-            // Berechne Überschneidung
-            int overlapStart = Math.max(startOffset, bodyStart);
-            int overlapEnd = Math.min(endOffset, bodyEnd);
-            int overlap = Math.max(0, overlapEnd - overlapStart);
-            
-            if (overlap > maxOverlap) {
-                maxOverlap = overlap;
-                dominant = method;
-            }
-        }
-        
-        return dominant;
-    }
-    
-    /**
-     * Prüft ob ein Text balanced Braces hat (gleiche Anzahl { und }).
-     */
-    private static boolean hasBalancedBraces(@NotNull String text) {
-        int openCount = 0;
-        int closeCount = 0;
-        
-        for (char c : text.toCharArray()) {
-            if (c == '{') openCount++;
-            else if (c == '}') closeCount++;
-        }
-        
-        return openCount == closeCount;
-    }
-    
-    /**
-     * Erweitert auf vollständige Statements OHNE Methoden-Expansion.
+     * Extrahiert AdjustedRanges aus einem PsiCodeBlock rekursiv.
+     *
+     * Regel: Überschreitet ein Statement die CPD-Grenze UND hat es einen inneren Block
+     * (z.B. Schleifen-Rumpf), wird in diesen Block abgestiegen statt das ganze Statement
+     * aufzunehmen. So entsteht pro Schleife/Block ein eigener AdjustedRange.
      */
     @NotNull
-    private static PsiElement expandToCompleteStatementsOnly(@NotNull PsiFile psiFile,
-                                                              @NotNull PsiElement startElement,
-                                                              @NotNull PsiElement endElement,
-                                                              @Nullable PsiElement commonParent) {
-        if (commonParent == null) {
-            return startElement;
+    private static List<AdjustedRange> extractRangesFromBlock(@NotNull PsiFile psiFile,
+                                                               @NotNull Document document,
+                                                               @NotNull PsiCodeBlock block,
+                                                               int startOffset,
+                                                               int endOffset) {
+        TextRange blockRange = block.getTextRange();
+        int adjStart = Math.max(startOffset, blockRange.getStartOffset());
+        int adjEnd   = Math.min(endOffset,   blockRange.getEndOffset());
+
+        List<AdjustedRange> result      = new ArrayList<>();
+        List<PsiStatement>  accumulated = new ArrayList<>();
+
+        for (PsiStatement stmt : block.getStatements()) {
+            TextRange sr = stmt.getTextRange();
+            if (sr.getEndOffset() <= adjStart || sr.getStartOffset() >= adjEnd) continue;
+
+            boolean crossesBoundary = sr.getStartOffset() < adjStart || sr.getEndOffset() > adjEnd;
+            PsiCodeBlock inner = getInnerBlock(stmt);
+
+            if (crossesBoundary && inner != null) {
+                // Flush bisher gesammelte Statements als eigenen Range
+                AdjustedRange flushed = buildRange(psiFile, document, accumulated);
+                if (flushed != null) result.add(flushed);
+                accumulated.clear();
+                // Abstieg in den inneren Block
+                result.addAll(extractRangesFromBlock(psiFile, document, inner, startOffset, endOffset));
+            } else {
+                accumulated.add(stmt);
+            }
         }
-        
-        // Finde vollständige Statements
-        PsiElement firstStatement = findFirstCompleteStatement(startElement);
-        PsiElement lastStatement = findLastCompleteStatement(endElement);
-        
-        if (firstStatement == null || lastStatement == null) {
-            return commonParent;
-        }
-        
-        // Wenn es dasselbe Statement ist
-        if (firstStatement == lastStatement) {
-            return firstStatement;
-        }
-        
-        // Finde den Container für beide Statements
-        PsiElement container = PsiTreeUtil.findCommonParent(firstStatement, lastStatement);
-        
-        //Wenn Container eine Methode ist, gebe NICHT die Methode zurück
-        // sondern den CodeBlock innerhalb
-        if (container instanceof PsiMethod) {
-            PsiMethod method = (PsiMethod) container;
-            PsiCodeBlock body = method.getBody();
-            return body != null ? body : container;
-        }
-        
-        // Wenn Container ein Block ist, ist das OK
-        if (container instanceof PsiCodeBlock) {
-            return container;
-        }
-        
-        return container != null ? container : firstStatement;
+
+        AdjustedRange flushed = buildRange(psiFile, document, accumulated);
+        if (flushed != null) result.add(flushed);
+        return result;
     }
-    
+
     /**
-     * Berechnet wie viel Prozent einer Methode vom gegebenen Bereich abgedeckt wird.
-     */
-    private static double calculateMethodCoverage(@NotNull PsiMethod method,
-                                                   int startOffset,
-                                                   int endOffset) {
-        PsiCodeBlock body = method.getBody();
-        if (body == null) {
-            return 0.0;
-        }
-        
-        // Berechne die Länge des Methoden-Bodies (ohne Signatur)
-        int bodyStart = body.getTextRange().getStartOffset();
-        int bodyEnd = body.getTextRange().getEndOffset();
-        int bodyLength = bodyEnd - bodyStart;
-        
-        if (bodyLength == 0) {
-            return 0.0;
-        }
-        
-        // Berechne Überschneidung zwischen Bereich und Body
-        int overlapStart = Math.max(startOffset, bodyStart);
-        int overlapEnd = Math.min(endOffset, bodyEnd);
-        int overlapLength = Math.max(0, overlapEnd - overlapStart);
-        
-        return (double) overlapLength / bodyLength;
-    }
-    
-    /**
-     * Erweitert den Bereich auf vollständige Statements.
-     */
-    @NotNull
-    private static PsiElement expandToCompleteStatements(@NotNull PsiFile psiFile,
-                                                          @NotNull PsiElement startElement,
-                                                          @NotNull PsiElement endElement) {
-        // Finde das erste vollständige Statement am Start
-        PsiElement firstStatement = findFirstCompleteStatement(startElement);
-        
-        // Finde das letzte vollständige Statement am Ende
-        PsiElement lastStatement = findLastCompleteStatement(endElement);
-        
-        if (firstStatement == null || lastStatement == null) {
-            // Fallback: Gemeinsames Parent
-            PsiElement commonParent = PsiTreeUtil.findCommonParent(startElement, endElement);
-            return commonParent != null ? commonParent : startElement;
-        }
-        
-        // Wenn Start und Ende im gleichen Statement sind
-        if (firstStatement == lastStatement) {
-            return firstStatement;
-        }
-        
-        // Finde gemeinsames Parent, das beide Statements enthält
-        PsiElement commonParent = PsiTreeUtil.findCommonParent(firstStatement, lastStatement);
-        
-        // Wenn Parent ein Block ist, verwende den Block
-        if (commonParent instanceof PsiCodeBlock) {
-            return commonParent;
-        }
-        
-        // WICHTIG: NIE eine ganze Methode oder Klasse zurückgeben
-        // Wenn Parent eine Methode ist, gebe den CodeBlock zurück
-        if (commonParent instanceof PsiMethod) {
-            PsiMethod method = (PsiMethod) commonParent;
-            PsiCodeBlock body = method.getBody();
-            return body != null ? body : commonParent;
-        }
-        
-        // Wenn Parent eine Klasse ist, versuche einen kleineren Bereich zu finden
-        if (commonParent instanceof PsiClass) {
-            return firstStatement;
-        }
-        
-        return commonParent != null ? commonParent : firstStatement;
-    }
-    
-    /**
-     * Findet das erste vollständige Statement ab einem Element.
+     * Gibt den inneren PsiCodeBlock eines Statements zurück, falls vorhanden.
      */
     @Nullable
-    private static PsiElement findFirstCompleteStatement(@NotNull PsiElement element) {
-        // Gehe nach oben bis wir ein Statement finden
-        PsiElement current = element;
-        while (current != null) {
-            if (isCompleteStatement(current)) {
-                return current;
-            }
-            
-            // Prüfe auch Geschwister-Elemente
-            PsiElement parent = current.getParent();
-            if (parent != null) {
-                PsiElement[] children = parent.getChildren();
-                for (PsiElement child : children) {
-                    if (child.getTextRange().getStartOffset() >= element.getTextRange().getStartOffset()
-                            && isCompleteStatement(child)) {
-                        return child;
-                    }
-                }
-            }
-            
-            current = current.getParent();
+    private static PsiCodeBlock getInnerBlock(@NotNull PsiStatement stmt) {
+        try {
+            PsiStatement body = null;
+            if (stmt instanceof PsiBlockStatement)   return ((PsiBlockStatement) stmt).getCodeBlock();
+            if (stmt instanceof PsiTryStatement)     return ((PsiTryStatement) stmt).getTryBlock();
+            if (stmt instanceof PsiForStatement)     body = ((PsiForStatement) stmt).getBody();
+            if (stmt instanceof PsiForeachStatement) body = ((PsiForeachStatement) stmt).getBody();
+            if (stmt instanceof PsiWhileStatement)   body = ((PsiWhileStatement) stmt).getBody();
+            if (stmt instanceof PsiDoWhileStatement) body = ((PsiDoWhileStatement) stmt).getBody();
+            if (stmt instanceof PsiIfStatement)      body = ((PsiIfStatement) stmt).getThenBranch();
+            if (body instanceof PsiBlockStatement)   return ((PsiBlockStatement) body).getCodeBlock();
+            return null;
+        } catch (Exception ignored) {
+            return null;
         }
-        
-        return null;
     }
-    
-    /**
-     * Findet das letzte vollständige Statement bis zu einem Element.
-     */
+
+    /** Baut einen AdjustedRange aus einer Liste von Statements. */
     @Nullable
-    private static PsiElement findLastCompleteStatement(@NotNull PsiElement element) {
-        // Gehe nach oben bis wir ein Statement finden
-        PsiElement current = element;
-        while (current != null) {
-            if (isCompleteStatement(current)) {
-                return current;
-            }
-            
-            // Prüfe auch Geschwister-Elemente (rückwärts)
-            PsiElement parent = current.getParent();
-            if (parent != null) {
-                PsiElement[] children = parent.getChildren();
-                for (int i = children.length - 1; i >= 0; i--) {
-                    PsiElement child = children[i];
-                    if (child.getTextRange().getEndOffset() <= element.getTextRange().getEndOffset()
-                            && isCompleteStatement(child)) {
-                        return child;
-                    }
-                }
-            }
-            
-            current = current.getParent();
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Prüft ob ein Element ein vollständiges Statement ist.
-     */
-    private static boolean isCompleteStatement(@NotNull PsiElement element) {
-        // Prüfe auf verschiedene Statement-Typen
-        if (element instanceof PsiStatement) {
-            return true;
-        }
-        
-        if (element instanceof PsiMethod) {
-            return true;
-        }
-        
-        if (element instanceof PsiField) {
-            return true;
-        }
-        
-        if (element instanceof PsiClass) {
-            return true;
-        }
-        
-        if (element instanceof PsiCodeBlock) {
-            return true;
-        }
-        
-        return false;
+    private static AdjustedRange buildRange(@NotNull PsiFile psiFile,
+                                             @NotNull Document document,
+                                             @NotNull List<PsiStatement> statements) {
+        if (statements.isEmpty()) return null;
+        PsiStatement first = statements.get(0);
+        PsiStatement last  = statements.get(statements.size() - 1);
+        int rStart = first.getTextRange().getStartOffset();
+        int rEnd   = last.getTextRange().getEndOffset();
+        return new AdjustedRange(
+            statements.toArray(new PsiStatement[0]),
+            document.getLineNumber(rStart) + 1,
+            document.getLineNumber(rEnd)   + 1,
+            psiFile.getText().substring(rStart, rEnd)
+        );
     }
 }
