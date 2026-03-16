@@ -119,7 +119,6 @@ class DuplicateSimilarityChecker {
                 return true;
             });
         }
-        Collections.sort(types);
         return String.join(";", types);
     }
 
