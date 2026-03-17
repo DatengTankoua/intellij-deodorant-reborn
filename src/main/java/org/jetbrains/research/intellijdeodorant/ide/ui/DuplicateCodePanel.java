@@ -69,6 +69,8 @@ public class DuplicateCodePanel extends JPanel {
             SwingConstants.CENTER
     );
     private final ScopeChooserCombo scopeChooserCombo;
+    private final PMDDuplicateCodeDetector detector = new PMDDuplicateCodeDetector();
+
     
     public DuplicateCodePanel(@NotNull Project project, @NotNull AnalysisScope scope) {
         this.project = project;
@@ -386,9 +388,6 @@ public class DuplicateCodePanel extends JPanel {
                 try {
                     // ProjectInfo erstellen
                     ProjectInfo projectInfo = ReadAction.compute(() -> new ProjectInfo(currentScope, false));
-                    
-                    // PMD Detector konfigurieren
-                    PMDDuplicateCodeDetector detector = new PMDDuplicateCodeDetector();
                     
                     // Duplikate detektieren
                     groups = detector.detectDuplicates(projectInfo, indicator);
