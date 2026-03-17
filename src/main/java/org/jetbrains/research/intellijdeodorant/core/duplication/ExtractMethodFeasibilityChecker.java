@@ -30,14 +30,12 @@ class ExtractMethodFeasibilityChecker {
                         group.removeFragment(f);
                         byFeasibility++;
                         LOG.info("Removed fragment (not refactorable): " + f);
-                        break; // Wenn eines der Fragmente nicht refactorable ist, ist die ganze Gruppe ungültig
                     }
                 }
                 else {
                     group.removeFragment(f);
                     byFeasibility++;
                     LOG.info("Removed fragment (too short for Extract Method): " + f);
-                    break; // Wenn eines der Fragmente zu kurz ist, ist die ganze Gruppe ungültig
                 }
             }
         }
