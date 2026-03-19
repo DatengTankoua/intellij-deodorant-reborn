@@ -109,18 +109,21 @@ public class DuplicateRangeAdjuster {
             if (sr.getEndOffset() <= adjStart || sr.getStartOffset() >= adjEnd) continue;
 
             boolean crossesBoundary = sr.getStartOffset() < adjStart || sr.getEndOffset() > adjEnd;
-            PsiCodeBlock inner = getInnerBlock(stmt);
+            List<PsiCodeBlock> innerBlocks = getInnerBlocks(stmt);
 
-            if (crossesBoundary && inner != null) {
+            if (crossesBoundary && !innerBlocks.isEmpty()) {
                 // Flush bisher gesammelte Statements als eigenen Range
                 AdjustedRange flushed = buildRange(psiFile, document, accumulated);
                 if (flushed != null) result.add(flushed);
                 accumulated.clear();
-                // Abstieg in den inneren Block
-                result.addAll(extractRangesFromBlock(psiFile, document, inner, startOffset, endOffset));
-            } else {
+                // Abstieg in alle inneren Blöcke
+                for (PsiCodeBlock inner : innerBlocks) {
+                    result.addAll(extractRangesFromBlock(psiFile, document, inner, startOffset, endOffset));
+                }
+            } else if (!crossesBoundary) {
                 accumulated.add(stmt);
             }
+            // crossesBoundary && innerBlocks.isEmpty(): kein Block-Rumpf vorhanden → überspringen
         }
 
         AdjustedRange flushed = buildRange(psiFile, document, accumulated);
@@ -132,20 +135,46 @@ public class DuplicateRangeAdjuster {
      * Gibt den inneren PsiCodeBlock eines Statements zurück, falls vorhanden.
      */
     @Nullable
-    private static PsiCodeBlock getInnerBlock(@NotNull PsiStatement stmt) {
+    private static List<PsiCodeBlock> getInnerBlocks(@NotNull PsiStatement stmt) {
+        List<PsiCodeBlock> blocks = new ArrayList<>();
         try {
-            PsiStatement body = null;
-            if (stmt instanceof PsiBlockStatement)   return ((PsiBlockStatement) stmt).getCodeBlock();
-            if (stmt instanceof PsiTryStatement)     return ((PsiTryStatement) stmt).getTryBlock();
-            if (stmt instanceof PsiForStatement)     body = ((PsiForStatement) stmt).getBody();
-            if (stmt instanceof PsiForeachStatement) body = ((PsiForeachStatement) stmt).getBody();
-            if (stmt instanceof PsiWhileStatement)   body = ((PsiWhileStatement) stmt).getBody();
-            if (stmt instanceof PsiDoWhileStatement) body = ((PsiDoWhileStatement) stmt).getBody();
-            if (stmt instanceof PsiIfStatement)      body = ((PsiIfStatement) stmt).getThenBranch();
-            if (body instanceof PsiBlockStatement)   return ((PsiBlockStatement) body).getCodeBlock();
-            return null;
-        } catch (Exception ignored) {
-            return null;
+            // { ... } – Block ist schon ein Block
+            if (stmt instanceof PsiBlockStatement) {
+                blocks.add(((PsiBlockStatement) stmt).getCodeBlock());
+                return blocks;
+            }
+            // try / catch / finally
+            if (stmt instanceof PsiTryStatement) {
+                PsiTryStatement tryStmt = (PsiTryStatement) stmt;
+                PsiCodeBlock tryBlock = tryStmt.getTryBlock();
+                if (tryBlock != null) blocks.add(tryBlock);
+                for (PsiCodeBlock cb : tryStmt.getCatchBlocks()) blocks.add(cb);
+                PsiCodeBlock finallyBlock = tryStmt.getFinallyBlock();
+                if (finallyBlock != null) blocks.add(finallyBlock);
+                return blocks;
+            }
+            // if / else
+            if (stmt instanceof PsiIfStatement) {
+                PsiIfStatement ifStmt = (PsiIfStatement) stmt;
+                addBlockBody(ifStmt.getThenBranch(), blocks);
+                addBlockBody(ifStmt.getElseBranch(), blocks);
+                return blocks;
+            }
+            // Schleifen
+            PsiStatement loopBody = null;
+            if (stmt instanceof PsiForStatement)     loopBody = ((PsiForStatement) stmt).getBody();
+            if (stmt instanceof PsiForeachStatement) loopBody = ((PsiForeachStatement) stmt).getBody();
+            if (stmt instanceof PsiWhileStatement)   loopBody = ((PsiWhileStatement) stmt).getBody();
+            if (stmt instanceof PsiDoWhileStatement) loopBody = ((PsiDoWhileStatement) stmt).getBody();
+            addBlockBody(loopBody, blocks);
+        } catch (Exception ignored) {}
+        return blocks;
+    }
+
+    /** Fügt den PsiCodeBlock des Statements zur Liste hinzu, falls es ein PsiBlockStatement ist. */
+    private static void addBlockBody(@Nullable PsiStatement body, @NotNull List<PsiCodeBlock> blocks) {
+        if (body instanceof PsiBlockStatement) {
+            blocks.add(((PsiBlockStatement) body).getCodeBlock());
         }
     }
 

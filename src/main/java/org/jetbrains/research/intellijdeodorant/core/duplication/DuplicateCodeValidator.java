@@ -22,8 +22,9 @@ public class DuplicateCodeValidator {
      * @param groups Zu validierende Gruppen (werden direkt modifiziert)
      */
     public static void validate(@NotNull Set<DuplicateCodeGroup> groups) {
-        int newGroupsBySimilarity  = DuplicateSimilarityChecker.validate(groups);
         int removedByFeasibility = ExtractMethodFeasibilityChecker.validate(groups);
+        int newGroupsBySimilarity  = DuplicateSimilarityChecker.validate(groups);
+
         groups.removeIf(group -> group.getOccurrences() < 2);
 
         LOG.info("Validation completed — new groups by similarity: " + newGroupsBySimilarity
