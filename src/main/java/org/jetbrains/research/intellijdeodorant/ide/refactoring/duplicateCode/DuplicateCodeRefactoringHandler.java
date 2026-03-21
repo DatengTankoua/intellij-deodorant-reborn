@@ -9,6 +9,7 @@ import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.TextRange;
@@ -262,7 +263,8 @@ public class DuplicateCodeRefactoringHandler {
             }
             
             PsiFile file = firstFragment.getFile();
-            Editor editor = FileEditorManager.getInstance(project).getSelectedTextEditor();
+            int startOffset = statements[0].getTextRange().getStartOffset();
+            Editor editor = FileEditorManager.getInstance(project).openTextEditor(new OpenFileDescriptor(project, file.getVirtualFile(), startOffset), true);
             
             ExtractMethodProcessor processor = new ExtractMethodProcessor(
                 project,
