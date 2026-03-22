@@ -1,5 +1,6 @@
 package org.jetbrains.research.intellijdeodorant.ide.refactoring.duplicateCode.strategy;
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
@@ -64,7 +65,24 @@ public class ExtractAndPullUpStrategy extends DuplicateRefactoringStrategy {
 
         ExtractMethodProcessor processor = runExtractMethod(context.fragments.get(0), sourceClass);
         if (processor == null) return;
-        performPullUp(processor.getExtractedMethod(), sourceClass, superClass);
+        
+        // Nach dem ExtractMethod-Dialog: Pull-Up triggern.
+        schedulePostExtractPullUp(processor, sourceClass, superClass);
+    }
+
+    /**
+     * Wartet auf die extrahierte Methode und führt anschließend den Pull-Up durch.
+     */
+    private void schedulePostExtractPullUp(@NotNull ExtractMethodProcessor processor,
+                                            @NotNull PsiClass sourceClass,
+                                            @NotNull PsiClass superClass) {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            PsiMethod extracted = processor.getExtractedMethod();
+            if (extracted == null || !extracted.isValid()) {
+                return;
+            }
+            performPullUp(extracted, sourceClass, superClass);
+        });
     }
 
     /**
