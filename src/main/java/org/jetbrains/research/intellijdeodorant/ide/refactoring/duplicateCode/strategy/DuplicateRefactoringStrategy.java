@@ -132,13 +132,14 @@ public abstract class DuplicateRefactoringStrategy {
      * Öffnet den Extract-Method-Dialog für das Fragment (Strategie innerhalb derselben Klasse).
      * IntelliJ ersetzt Duplikate in derselben Klasse automatisch.
      */
-    protected void runExtractMethod(@NotNull DuplicateCodeFragment fragment,
+    protected ExtractMethodProcessor runExtractMethod(@NotNull DuplicateCodeFragment fragment,
                                      @Nullable PsiClass targetClass) {
         ExtractMethodProcessor processor = buildProcessor(fragment, targetClass);
-        if (processor == null) return;
+        if (processor == null) return null;
         PsiFile file = fragment.getFile();
         ApplicationManager.getApplication().invokeLater(() ->
                 ExtractMethodHandler.invokeOnElements(project, processor, file, true));
+        return processor;
     }
 
 
