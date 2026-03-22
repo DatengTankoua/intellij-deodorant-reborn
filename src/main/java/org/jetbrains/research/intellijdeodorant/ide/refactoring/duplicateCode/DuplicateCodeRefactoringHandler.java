@@ -112,7 +112,10 @@ public class DuplicateCodeRefactoringHandler {
             if (ctx.superClassIsInSource) {
                 // Gemeinsame Superklasse im Projekt-Quellcode gefunden: Extract and Pull Up
                 return new ExtractAndPullUpStrategy(project);
-            } 
+            } else {
+                // Gemeinsame Superklasse in externer Bibliothek: neue Zwischenklasse
+                return new ExtractSuperclassStrategy(project);
+            }
         }
 
         return null;
