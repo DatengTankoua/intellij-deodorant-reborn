@@ -165,4 +165,50 @@ public abstract class DuplicateRefactoringStrategy {
         
         public boolean superClassIsInSource;
     }
+
+    /**
+     * Fragt den Nutzer nach einem Namen für die neue Zwischenklasse und validiert diesen.
+     */
+    @Nullable
+    protected String askUserForClassName(@NotNull String defaultName, @Nullable PsiDirectory targetDir, String message, String title) {
+        return com.intellij.openapi.ui.Messages.showInputDialog(
+                project,
+                message,
+                title,
+                com.intellij.openapi.ui.Messages.getQuestionIcon(),
+                defaultName,
+                new com.intellij.openapi.ui.InputValidatorEx() { // Nutze das Extended Interface
+                    @Nullable
+                    @Override
+                    public String getErrorText(String inputString) {
+                        String name = inputString.trim();
+                        
+                        if (name.isEmpty()) {
+                            return "Class name cannot be empty.";
+                        }
+                        
+                        if (!com.intellij.psi.PsiNameHelper.getInstance(project).isIdentifier(name)) {
+                            return "'" + name + "' is not a valid Java identifier.";
+                        }
+                        
+                        if (targetDir != null && targetDir.findFile(name + ".java") != null) {
+                            return "A class named '" + name + "' already exists in this directory.";
+                        }
+                        
+                        return null; 
+                    }
+
+                    @Override
+                    public boolean checkInput(String inputString) {
+                        // Der Button wird nur aktiv, wenn getErrorText null zurückgibt
+                        return getErrorText(inputString) == null;
+                    }
+
+                    @Override
+                    public boolean canClose(String inputString) {
+                        return checkInput(inputString);
+                    }
+                }
+        );
+    }
 }
