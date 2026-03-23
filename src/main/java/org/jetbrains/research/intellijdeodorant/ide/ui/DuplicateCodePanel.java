@@ -70,6 +70,7 @@ public class DuplicateCodePanel extends JPanel {
     );
     private final ScopeChooserCombo scopeChooserCombo;
     private final PMDDuplicateCodeDetector detector = new PMDDuplicateCodeDetector();
+    private long lastOutOfCodeBlockModCount = -1;
 
     
     public DuplicateCodePanel(@NotNull Project project, @NotNull AnalysisScope scope) {
@@ -189,6 +190,7 @@ public class DuplicateCodePanel extends JPanel {
         
         exportButton.setToolTipText("Export results");
         exportButton.setEnabled(false);
+        exportButton.addActionListener(e -> exportResults());
         toolbar.add(exportButton);
         
         add(toolbar, BorderLayout.NORTH);
@@ -197,10 +199,16 @@ public class DuplicateCodePanel extends JPanel {
     /**
      * Registriert einen PSI-Änderungs-Listener, der das Panel bei Code-Änderungen zurücksetzt.
      */
-    private void registerPsiModificationListener() {
-        MessageBus projectMessageBus = project.getMessageBus();
-        projectMessageBus.connect().subscribe(PsiModificationTracker.TOPIC, 
-            () -> ApplicationManager.getApplication().invokeLater(this::showRefreshingProposal));
+     private void registerPsiModificationListener() {
+        PsiModificationTracker tracker = com.intellij.psi.PsiManager.getInstance(project).getModificationTracker();
+        lastOutOfCodeBlockModCount = tracker.getModificationCount();
+        project.getMessageBus().connect().subscribe(PsiModificationTracker.TOPIC, () -> {
+            long current = tracker.getModificationCount();
+            if (current != lastOutOfCodeBlockModCount) {
+                lastOutOfCodeBlockModCount = current;
+                ApplicationManager.getApplication().invokeLater(this::showRefreshingProposal);
+            }
+        });
     }
     
     /**
@@ -430,6 +438,49 @@ public class DuplicateCodePanel extends JPanel {
         };
         
         task.queue();
+    }
+   
+        
+    private void exportResults() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setSelectedFile(new java.io.File("duplicate_code_report.csv"));
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV files", "csv"));
+        if (fileChooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+
+        java.io.File file = fileChooser.getSelectedFile();
+        if (!file.getName().endsWith(".csv")) {
+            file = new java.io.File(file.getAbsolutePath() + ".csv");
+        }
+
+        try (java.io.PrintWriter writer = new java.io.PrintWriter(
+                new java.io.OutputStreamWriter(new java.io.FileOutputStream(file), java.nio.charset.StandardCharsets.UTF_8))) {
+            // UTF-8 BOM – damit Excel die Kodierung korrekt erkennt
+            writer.print('\uFEFF');
+            // Semikolon als Trennzeichen – Standard für Excel in europäischen Ländern
+            writer.println("Group;Tokens;Lines;Severity;Duplicates;Locations");
+            List<DuplicateCodeGroup> groups = tableModel.getGroups();
+            for (int i = 0; i < groups.size(); i++) {
+                DuplicateCodeGroup group = groups.get(i);
+                String locations = group.getFragments().stream()
+                        .map(f -> ReadAction.compute(() -> {
+                            PsiFile pf = f.getFile();
+                            String name = pf != null ? pf.getName() : "?";
+                            return name + ":" + f.getStartLine() + "-" + f.getEndLine();
+                        }))
+                        .collect(Collectors.joining(" | "));
+                writer.printf("%d;%d;%d;%d;%d;\"%s\"%n",
+                        i + 1,
+                        group.getTokens(),
+                        (int) group.getAverageLines(),
+                        group.getSeverity(),
+                        group.getFragments().size(),
+                        locations.replace("\"", "'")
+                );
+            }
+            showInfoMessage("Exported " + groups.size() + " groups to " + file.getName());
+        } catch (java.io.IOException ex) {
+            showErrorMessage("Export failed: " + ex.getMessage());
+        }
     }
     
     private void showInfoMessage(String message) {
