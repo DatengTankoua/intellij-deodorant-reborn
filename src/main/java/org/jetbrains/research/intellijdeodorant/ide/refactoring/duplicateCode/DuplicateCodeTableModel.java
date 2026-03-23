@@ -67,6 +67,14 @@ public class DuplicateCodeTableModel extends AbstractTableModel {
     public DuplicateCodeGroup getGroup(int index) {
         return groups.get(index);
     }
+
+    /**
+     * Gibt alle Gruppen zurück.
+     */
+    @NotNull
+    public List<DuplicateCodeGroup> getGroups() {
+        return java.util.Collections.unmodifiableList(groups);
+    }
     
     /**
      * Entfernt eine Gruppe.

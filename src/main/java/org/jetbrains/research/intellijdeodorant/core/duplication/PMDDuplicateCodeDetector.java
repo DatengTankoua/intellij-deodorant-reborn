@@ -86,7 +86,7 @@ public class PMDDuplicateCodeDetector {
 
         // Prüfe ob Cache verwendet werden kann
         Project project = projectInfo.getProject();
-        long currentModificationCount = project.getService(PsiModificationTracker.class).getModificationCount();
+        long currentModificationCount = PsiManager.getInstance(project).getModificationTracker().getModificationCount();
         List<VirtualFile> javaFiles = collectJavaFiles(projectInfo, indicator);
         int currentFileCount = javaFiles.size();
         
