@@ -182,6 +182,10 @@ public abstract class DuplicateRefactoringStrategy {
                     @Override
                     public String getErrorText(String inputString) {
                         String name = inputString.trim();
+
+                        if (inputString.equals(defaultName)) {
+                            return null; // Standardname ist immer gültig
+                        }
                         
                         if (name.isEmpty()) {
                             return "Class name cannot be empty.";
@@ -210,5 +214,16 @@ public abstract class DuplicateRefactoringStrategy {
                     }
                 }
         );
+    }
+
+    /**
+     * Wählt das Verzeichnis der ersten betroffenen Klasse als Ziel.
+     */
+    @Nullable
+    protected PsiDirectory chooseTargetDirectory(@NotNull RefactoringContext context) {
+        if (context.affectedClasses.isEmpty()) return null;
+        PsiFile file = context.affectedClasses.get(0).getContainingFile();
+        if (file == null) return null;
+        return file.getContainingDirectory();
     }
 }
