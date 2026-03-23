@@ -118,12 +118,9 @@ public class DuplicateCodeRefactoringHandler {
             }
         }
 
-        return null;
+        // Keine gemeinsame Hierarchie
+        return new ExtractUtilityMethodStrategy(project);
     }
-
-    // -----------------------------------------------------------------------
-    // Bestatigungsdialog
-    // -----------------------------------------------------------------------
 
     private boolean showConfirmationDialog(
             @NotNull DuplicateRefactoringStrategy.RefactoringContext context,

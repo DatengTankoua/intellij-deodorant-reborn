@@ -22,7 +22,7 @@ import java.util.*;
  * Prüft ob die Fragmente einer Gruppe nach Extract Method noch als Duplikate
  * erkennbar wären (strukturelle und typbasierte Ähnlichkeit).
  */
-class DuplicateSimilarityChecker {
+public class DuplicateSimilarityChecker {
 
     private static final Logger LOG = Logger.getInstance(DuplicateSimilarityChecker.class);
 
@@ -153,15 +153,16 @@ class DuplicateSimilarityChecker {
     }
 
     /** Typ-1: sucht exakte strukturelle Duplikate via {@link DuplicatesFinder}. */
-    private static List<Match> findExactMatches(
-            @NotNull InternalProcessor proc,
+    public static List<Match> findExactMatches(
+            @NotNull ExtractMethodProcessor proc,
             @NotNull PsiElement[] elements,
             @NotNull Set<PsiClass> classesToSearch) {
-        ReturnValue returnValue = proc.getOutputVariable() != null
-            ? new VariableReturnValue(proc.getOutputVariable()) : null;
+        PsiVariable[] outputVars = proc.getOutputVariables();
+        ReturnValue returnValue = (outputVars != null && outputVars.length > 0 && outputVars[0] != null)
+            ? new VariableReturnValue(outputVars[0]) : null;
         List<PsiVariable> parameters = new ArrayList<>();
-        if (proc.getOutputVariables() != null) {
-            for (PsiVariable v : proc.getOutputVariables()) {
+        if (outputVars != null) {
+            for (PsiVariable v : outputVars) {
                 if (v != null) parameters.add(v);
             }
         }

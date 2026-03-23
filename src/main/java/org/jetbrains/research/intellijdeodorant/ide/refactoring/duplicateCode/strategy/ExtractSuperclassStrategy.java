@@ -2,19 +2,10 @@ package org.jetbrains.research.intellijdeodorant.ide.refactoring.duplicateCode.s
 
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.roots.ProjectRootManager;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.refactoring.extractMethod.ExtractMethodProcessor;
-import com.intellij.refactoring.extractSuperclass.ExtractSuperClassProcessor;
-import com.intellij.refactoring.memberPullUp.PullUpProcessor;
-import com.intellij.refactoring.util.DocCommentPolicy;
-import com.intellij.refactoring.util.classMembers.MemberInfo;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.List;
 
 /**
  * Strategie 3: Extract Superclass.
@@ -120,7 +111,7 @@ public class ExtractSuperclassStrategy extends DuplicateRefactoringStrategy {
                                         newClass.getContainingFile().getText());
                         PsiFile added = (PsiFile) targetDir.add(javaFile);
                         com.intellij.psi.codeStyle.CodeStyleManager.getInstance(project).reformat(added);
-                        
+
                         // Hole die Klasse aus der neu erstellten Datei
                         for (PsiClass cls : com.intellij.psi.util.PsiTreeUtil
                                 .findChildrenOfType(added, PsiClass.class)) {
@@ -138,17 +129,6 @@ public class ExtractSuperclassStrategy extends DuplicateRefactoringStrategy {
             showError("Failed to create intermediate superclass: " + e.getMessage());
             return null;
         }
-    }
-
-    /**
-     * Wählt das Verzeichnis der ersten betroffenen Klasse als Ziel.
-     */
-    @Nullable
-    private PsiDirectory chooseTargetDirectory(@NotNull RefactoringContext context) {
-        if (context.affectedClasses.isEmpty()) return null;
-        PsiFile file = context.affectedClasses.get(0).getContainingFile();
-        if (file == null) return null;
-        return file.getContainingDirectory();
     }
 
     /**
