@@ -470,7 +470,7 @@ public class DuplicateCodePanel extends JPanel {
                         .collect(Collectors.joining(" | "));
                 writer.printf("%d;%d;%d;%d;%d;\"%s\"%n",
                         i + 1,
-                        group.getTokens(),
+                        group.getFirstFragment().getTokens(),
                         (int) group.getAverageLines(),
                         group.getSeverity(),
                         group.getFragments().size(),

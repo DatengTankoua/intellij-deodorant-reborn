@@ -43,7 +43,9 @@ public class DuplicateSimilarityChecker {
         for (DuplicateCodeGroup g : new ArrayList<>(groups)) {
             duplicateSimilarityChecker(g, newGroups);
         }
+        newGroups.removeIf(group -> group.getOccurrences() < 2);
         groups.addAll(newGroups);
+        groups.removeIf(group -> group.getOccurrences() < 2);
 
         return newGroups.size();
     }

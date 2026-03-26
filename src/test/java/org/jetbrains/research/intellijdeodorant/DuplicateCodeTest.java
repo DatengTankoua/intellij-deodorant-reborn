@@ -277,7 +277,7 @@ public class DuplicateCodeTest extends LightJavaCodeInsightFixtureTestCase {
     }
 
     public void testValidator_emptyGroups_doesNotThrow() {
-        DuplicateCodeValidator.validate(new HashSet<>());
+        DuplicateCodeValidator.validate(new HashSet<>(), 0, 0);
     }
 
     public void testValidator_tooShortFragments_groupRemoved() {
@@ -285,7 +285,7 @@ public class DuplicateCodeTest extends LightJavaCodeInsightFixtureTestCase {
         group.addFragment(new DuplicateCodeFragment(myFixture.addFileToProject("ShortA.java", "class ShortA {}"), 1, 3, 100, "code"));
         group.addFragment(new DuplicateCodeFragment(myFixture.addFileToProject("ShortB.java", "class ShortB {}"), 1, 3, 100, "code"));
         Set<DuplicateCodeGroup> groups = new HashSet<>(Arrays.asList(group));
-        DuplicateCodeValidator.validate(groups);
+        DuplicateCodeValidator.validate(groups, 0, 0);
         assertTrue(groups.isEmpty());
     }
 
@@ -294,7 +294,7 @@ public class DuplicateCodeTest extends LightJavaCodeInsightFixtureTestCase {
         group.addFragment(new DuplicateCodeFragment(myFixture.addFileToProject("LongA.java", "class LongA {}"), 1, 8, 100, "code"));
         group.addFragment(new DuplicateCodeFragment(myFixture.addFileToProject("LongB.java", "class LongB {}"), 1, 8, 100, "code"));
         Set<DuplicateCodeGroup> groups = new HashSet<>(Arrays.asList(group));
-        DuplicateCodeValidator.validate(groups);
+        DuplicateCodeValidator.validate(groups, 0, 0);
         assertTrue(groups.isEmpty());
     }
 
@@ -404,7 +404,7 @@ public class DuplicateCodeTest extends LightJavaCodeInsightFixtureTestCase {
         group.addFragment(frag1);
         group.addFragment(frag2);
         Set<DuplicateCodeGroup> groups = new HashSet<>(Collections.singletonList(group));
-        DuplicateCodeValidator.validate(groups);
+        DuplicateCodeValidator.validate(groups, 0, 0);
 
         assertFalse("Validator must keep the group: fragments are extractable (>= 7 lines + valid PSI)",
                 groups.isEmpty());
@@ -428,7 +428,7 @@ public class DuplicateCodeTest extends LightJavaCodeInsightFixtureTestCase {
         group.addFragment(f1);
         group.addFragment(f2);
         Set<DuplicateCodeGroup> groups = new HashSet<>(Collections.singletonList(group));
-        DuplicateCodeValidator.validate(groups);
+        DuplicateCodeValidator.validate(groups, 0, 0);
         assertFalse("Group must survive validation before context analysis", groups.isEmpty());
 
         DuplicateRefactoringStrategy.RefactoringContext ctx =
@@ -468,7 +468,7 @@ public class DuplicateCodeTest extends LightJavaCodeInsightFixtureTestCase {
         group.addFragment(fX);
         group.addFragment(fY);
         Set<DuplicateCodeGroup> groups = new HashSet<>(Collections.singletonList(group));
-        DuplicateCodeValidator.validate(groups);
+        DuplicateCodeValidator.validate(groups, 0, 0);
         assertFalse("Cross-class group must survive validation", groups.isEmpty());
 
         DuplicateRefactoringStrategy.RefactoringContext ctx =
@@ -655,7 +655,7 @@ public class DuplicateCodeTest extends LightJavaCodeInsightFixtureTestCase {
         group.addFragment(new DuplicateCodeFragment(fileA, 1, 7, 100, "code")); // 7 lines, no stmts → not refactorable
         group.addFragment(new DuplicateCodeFragment(fileB, 1, 3, 100, "code")); // 3 lines  → too short
         Set<DuplicateCodeGroup> groups = new HashSet<>(Collections.singletonList(group));
-        DuplicateCodeValidator.validate(groups);
+        DuplicateCodeValidator.validate(groups, 0, 0); 
         assertTrue("Group with no feasible fragments must be removed by validator", groups.isEmpty());
     }
 
