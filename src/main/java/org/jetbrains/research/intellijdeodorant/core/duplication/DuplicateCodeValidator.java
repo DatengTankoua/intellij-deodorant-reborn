@@ -20,14 +20,22 @@ public class DuplicateCodeValidator {
      * Führt alle Validierungsschritte durch und entfernt ungültige Fragmente/Gruppen.
      *
      * @param groups Zu validierende Gruppen (werden direkt modifiziert)
+     * @param matchCount Anzahl der gefundenen Matches durch PMD
+     * @param adjustedGroupCount Anzahl der Gruppen nach Anpassung
      */
-    public static void validate(@NotNull Set<DuplicateCodeGroup> groups) {
+    public static void validate(@NotNull Set<DuplicateCodeGroup> groups, int matchCount, int adjustedGroupCount) {
+        int initialGroupCount = groups.size();
         int removedByFeasibility = ExtractMethodFeasibilityChecker.validate(groups);
+        int groupsAfterFeasibility = groups.size();
         int newGroupsBySimilarity  = DuplicateSimilarityChecker.validate(groups);
+        int removedGroupsBySimilarity = groupsAfterFeasibility - groups.size() + newGroupsBySimilarity;
 
-        groups.removeIf(group -> group.getOccurrences() < 2);
-
-        LOG.info("Validation completed — new groups by similarity: " + newGroupsBySimilarity
-               + ", removed by feasibility: " + removedByFeasibility);
+         LOG.info("=== SUMMARY ===");
+        LOG.info("Total matches found by PMD: " + matchCount);
+        LOG.info("Total groups created after adjustment: " + adjustedGroupCount);
+        LOG.info("Total groups after merging: " + initialGroupCount);
+        LOG.info("Validation completed - new groups by similarity: " + newGroupsBySimilarity
+               + ", removed by feasibility: " + removedByFeasibility
+               + ", removed by similarity: " + removedGroupsBySimilarity);
     }
 }

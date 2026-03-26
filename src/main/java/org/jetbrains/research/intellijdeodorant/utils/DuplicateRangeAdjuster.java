@@ -178,6 +178,40 @@ public class DuplicateRangeAdjuster {
         }
     }
 
+    /**
+     * Zählt die Tokens in einem Array von Statements.
+     */
+    public static int countTokens(@NotNull PsiStatement[] statements) {
+        int[] count = {0};
+        for (PsiStatement stmt : statements) {
+            stmt.accept(new JavaRecursiveElementVisitor() {
+                
+                @Override
+                public void visitAnnotation(@NotNull PsiAnnotation annotation) {
+                    // Annotations werden nicht als Tokens gezählt
+                }
+
+                @Override
+                public void visitComment(@NotNull PsiComment comment) {
+                    // Leer lassen -> Verhindert das Zählen interner JavaDoc-Tokens
+                }
+
+                @Override
+                public void visitElement(@NotNull PsiElement element) {
+                    super.visitElement(element);
+
+                    if (element instanceof PsiJavaToken) {
+                        
+                        if (element.getTextLength() > 0 ) {
+                            count[0]++;
+                        }
+                    }
+                }
+            });
+        }
+        return count[0];
+    }
+
     /** Baut einen AdjustedRange aus einer Liste von Statements. */
     @Nullable
     private static AdjustedRange buildRange(@NotNull PsiFile psiFile,

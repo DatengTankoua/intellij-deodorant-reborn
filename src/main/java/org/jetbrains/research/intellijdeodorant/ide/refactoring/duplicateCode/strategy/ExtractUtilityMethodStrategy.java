@@ -160,6 +160,12 @@ public class ExtractUtilityMethodStrategy extends DuplicateRefactoringStrategy {
             if (extracted == null || !extracted.isValid()) {
                 return;
             }
+            // Macht die Methode {static public} 
+            WriteCommandAction.runWriteCommandAction(project, "Prepare Method for Cross-Class", null, () -> {
+                PsiUtil.setModifierProperty(extracted, PsiModifier.STATIC, true);
+                PsiUtil.setModifierProperty(extracted, PsiModifier.PRIVATE, false);
+                PsiUtil.setModifierProperty(extracted, PsiModifier.PUBLIC, true);
+            }, extracted.getContainingFile());
 
             // Vorher gefundene Matches in anderen Klassen ersetzen
             if (!preFoundMatches.isEmpty()) {
@@ -210,17 +216,10 @@ public class ExtractUtilityMethodStrategy extends DuplicateRefactoringStrategy {
     }
 
     /**
-     * Macht die Methode {@code static public} und verschiebt sie in die Utility-Klasse.
+     * verschiebt die Methode in die Utility-Klasse.
      */
     private void moveMemberToUtilityClass(@NotNull PsiMethod method,
                                            @NotNull PsiClass utilClass) {
-        // Erst static setzen
-        WriteCommandAction.runWriteCommandAction(project, "Set Method Static", null, () -> {
-            PsiUtil.setModifierProperty(method, PsiModifier.STATIC, true);
-            PsiUtil.setModifierProperty(method, PsiModifier.PRIVATE, false);
-            PsiUtil.setModifierProperty(method, PsiModifier.PUBLIC, true);
-        }, method.getContainingFile());
-
         String targetQualifiedName = utilClass.getQualifiedName();
         if (targetQualifiedName == null) {
             showError("Utility class has no qualified name.");

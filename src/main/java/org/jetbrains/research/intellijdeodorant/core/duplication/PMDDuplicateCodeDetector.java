@@ -275,8 +275,7 @@ public class PMDDuplicateCodeDetector {
         PsiManager psiManager = PsiManager.getInstance(project);
         
         int matchCount = 0;
-        int validGroupCount = 0;
-        int mergedGroupCount = 0;
+        int adjustedGroupCount = 0;
         
         while (matches.hasNext()) {
             Match match = matches.next();
@@ -294,9 +293,10 @@ public class PMDDuplicateCodeDetector {
                 LOG.info("    Mark #" + markIndex + ": " + mark.getLocation().getFileId().getAbsolutePath() + 
                         " [" + mark.getLocation().getStartLine() + "-" + mark.getLocation().getEndLine() + "]");
             }
-
+            
             try {
                 List<DuplicateCodeGroup> newGroups = createGroupsFromMatch(match, psiManager);
+                adjustedGroupCount += newGroups.size();
                 LOG.info("  Created " + newGroups.size() + " group(s) from match");
 
                 for (DuplicateCodeGroup newGroup : newGroups) {
@@ -309,11 +309,9 @@ public class PMDDuplicateCodeDetector {
                         for (DuplicateCodeFragment fragment : newGroup.getFragments()) {
                             existingGroup.addFragment(fragment);
                         }
-                        mergedGroupCount++;
                         LOG.info("  Group merged into existing group (now " + existingGroup.getOccurrences() + " occurrences)");
                     } else {
                         groups.add(newGroup);
-                        validGroupCount++;
                         LOG.info("  Group added (valid)");
                     }
                 }
@@ -322,14 +320,9 @@ public class PMDDuplicateCodeDetector {
             }
         }
         
-        LOG.info("=== SUMMARY ===");
-        LOG.info("Total matches found by PMD: " + matchCount);
-        LOG.info("Valid groups created: " + validGroupCount);
-        LOG.info("Groups merged: " + mergedGroupCount);
-        
         // Validierung: Typen, Struktur, Output-Variablen, Kontrollfluss, Extrahierbarkeit
-        DuplicateCodeValidator.validate(groups);
-        
+        DuplicateCodeValidator.validate(groups, matchCount, adjustedGroupCount);
+
         return groups;
     }
 
@@ -427,11 +420,12 @@ public class PMDDuplicateCodeDetector {
                 // Pro überschnittener Methode einen eigenen Refactoring-Kandidaten erstellen
                 for (DuplicateRangeAdjuster.AdjustedRange adjustedRange :
                         DuplicateRangeAdjuster.adjustRangeWithLines(psiFile, document, startLine, endLine)) {
+                    int adjustedTokens = DuplicateRangeAdjuster.countTokens(adjustedRange.statements);
                     DuplicateCodeFragment fragment = new DuplicateCodeFragment(
                         psiFile,
                         adjustedRange.startLine,
                         adjustedRange.endLine,
-                        tokenCount,
+                        adjustedTokens,
                         adjustedRange.code
                     );
                     fragment.setStatements(adjustedRange.statements);

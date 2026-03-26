@@ -135,7 +135,7 @@ public class DuplicateCodeTableModel extends AbstractTableModel {
                     return group.getOccurrences();
                     
                 case 1:  // Tokens
-                    return group.getTokens();
+                    return group.getFirstFragment().getTokens();
                     
                 case 2:  // Avg Lines
                     return Math.round(group.getAverageLines() * 10) / 10.0;

@@ -22,23 +22,23 @@ class ExtractMethodFeasibilityChecker {
      */
     static int validate(@NotNull Set<DuplicateCodeGroup> groups) {
         
-        int byFeasibility = 0;
+        int byFeasibility = groups.size();
         for (DuplicateCodeGroup group : groups) {
             for (DuplicateCodeFragment f : new ArrayList<>(group.getFragments())) {
                 if (f.getLineCount() >= 7) {
                     if (!isRefactorable(f)) {
                         group.removeFragment(f);
-                        byFeasibility++;
                         LOG.info("Removed fragment (not refactorable): " + f);
                     }
                 }
                 else {
                     group.removeFragment(f);
-                    byFeasibility++;
                     LOG.info("Removed fragment (too short for Extract Method): " + f);
                 }
             }
         }
+        groups.removeIf(group -> group.getOccurrences() < 2);
+        byFeasibility -= groups.size();
         return byFeasibility;
     }
     
