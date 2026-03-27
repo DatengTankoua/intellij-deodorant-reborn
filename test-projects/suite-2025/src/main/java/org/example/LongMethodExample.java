@@ -1,9 +1,10 @@
 package org.example;
 
+import javax.swing.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public class LongMethodExample {
+public class LongMethodExample extends SuperClass {
     public boolean index = true;
     public void processOrder(Order order) {
         // Validation du client
@@ -49,6 +50,32 @@ public class LongMethodExample {
         emailBody += "Taxes: " + taxes + "\n";
         emailBody += "Total: " + total + "\n";
         sendEmail(customerEmail, "Order Confirmation", emailBody);
+    }
+
+    public void processCustomer(String name, int age, String address) {
+        // Unused variable (PMD warns)
+        int temp = 0;
+
+        // Long method (PMD + DesigniteJava)
+        System.out.println("Processing customer: " + name);
+        if (age > 18) {
+            System.out.println("Adult");
+        } else {
+            System.out.println("Minor");
+        }
+
+        // Duplicate code (PMD DuplicateCode)
+        for (int i = 0; i < 3; i++) {
+            System.out.println("Checking data...");
+        }
+        for (int i = 0; i < 3; i++) {
+            System.out.println("Checking data...");
+        }
+
+        // Feature Envy smell (DesigniteJava)
+        address.toLowerCase();
+        address.trim();
+        address.substring(0, 2);
     }
 
     private void sendEmail(String to, String subject, String body) {

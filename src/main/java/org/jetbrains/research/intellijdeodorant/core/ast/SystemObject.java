@@ -14,7 +14,6 @@ import org.jetbrains.research.intellijdeodorant.inheritance.InheritanceTree;
 import org.jetbrains.research.intellijdeodorant.ide.refactoring.typeStateChecking.TypeCheckElimination;
 import org.jetbrains.research.intellijdeodorant.ide.refactoring.typeStateChecking.TypeCheckEliminationGroup;
 
-import javax.swing.tree.DefaultMutableTreeNode;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -468,13 +467,7 @@ public class SystemObject {
             tree = inheritanceDetection.getTree(abstractClassType);
         }
         if (tree != null) {
-            DefaultMutableTreeNode rootNode = tree.getRootNode();
-            DefaultMutableTreeNode leaf = rootNode.getFirstLeaf();
-            List<String> inheritanceHierarchySubclassNames = new ArrayList<>();
-            while (leaf != null) {
-                inheritanceHierarchySubclassNames.add((String) leaf.getUserObject());
-                leaf = leaf.getNextLeaf();
-            }
+            List<String> inheritanceHierarchySubclassNames = UtilityClass.getStrings(tree);
             int matchCounter = 0;
             for (PsiField staticField : staticFields) {
                 for (String subclassName : inheritanceHierarchySubclassNames) {

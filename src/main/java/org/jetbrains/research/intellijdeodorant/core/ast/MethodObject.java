@@ -211,18 +211,7 @@ public class MethodObject implements AbstractMethodDeclaration {
             if (abstractStatements.size() == 1 && abstractStatements.get(0) instanceof StatementObject) {
                 StatementObject statementObject = (StatementObject) abstractStatements.get(0);
                 PsiElement statement = statementObject.getStatement();
-                PsiMethodCallExpression methodInvocation = null;
-                if (statement instanceof PsiReturnStatement) {
-                    PsiReturnStatement returnStatement = (PsiReturnStatement) statement;
-                    if (returnStatement.getReturnValue() instanceof PsiMethodCallExpression) {
-                        methodInvocation = (PsiMethodCallExpression) returnStatement.getReturnValue();
-                    }
-                } else if (statement instanceof PsiExpressionStatement) {
-                    PsiExpressionStatement expressionStatement = (PsiExpressionStatement) statement;
-                    if (expressionStatement.getExpression() instanceof PsiMethodCallExpression) {
-                        methodInvocation = (PsiMethodCallExpression) expressionStatement.getExpression();
-                    }
-                }
+                PsiMethodCallExpression methodInvocation = UtilityClass.getPsiMethodCallExpression(statement);
                 if (methodInvocation != null) {
                     PsiExpression methodQualifierExpression = methodInvocation.getMethodExpression().getQualifierExpression();
                     List<MethodInvocationObject> methodInvocations = statementObject.getMethodInvocations();

@@ -5,6 +5,9 @@ public class GodClassExample {
     private String userName;
     private String userEmail;
     private int userAge;
+    private String name;
+    private int age;
+    private String email;
 
     public void setUserName(String name) {
         this.userName = name;

@@ -1,7 +1,5 @@
 package org.jetbrains.research.intellijdeodorant.core;
 
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiField;
 import org.jetbrains.research.intellijdeodorant.core.ast.*;
 import org.jetbrains.research.intellijdeodorant.core.ast.decomposition.cfg.PlainVariable;
 
@@ -153,15 +151,7 @@ public class GodClassVisualizationData implements VisualizationData {
     }
 
     private FieldInstructionObject findFieldInstruction(PlainVariable variable, List<FieldInstructionObject> fieldInstructions) {
-        for (FieldInstructionObject fieldInstruction : fieldInstructions) {
-            PsiElement psiElement = fieldInstruction.getElement();
-            if (psiElement instanceof PsiField) {
-                PsiField psiField = (PsiField) psiElement;
-                if (psiField.getName().equals(variable.getName()))
-                    return fieldInstruction;
-            }
-        }
-        return null;
+        return UtilityClass.getFieldInstructionObject(variable, fieldInstructions);
     }
 
     public Map<MethodObject, Map<MethodInvocationObject, Integer>> getInternalMethodInvocationMap() {
