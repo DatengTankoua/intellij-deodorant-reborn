@@ -224,15 +224,7 @@ public class FeatureEnvyVisualizationData implements VisualizationData {
     }
 
     private FieldInstructionObject findFieldInstruction(PlainVariable variable, List<FieldInstructionObject> fieldInstructions) {
-        for (FieldInstructionObject fieldInstruction : fieldInstructions) {
-            PsiElement psiElement = fieldInstruction.getElement();
-            if (psiElement instanceof PsiField) {
-                PsiField psiField = (PsiField) psiElement;
-                if (psiField.getName().equals(variable.getName()))
-                    return fieldInstruction;
-            }
-        }
-        return null;
+        return UtilityClass.getFieldInstructionObject(variable, fieldInstructions);
     }
 
     private LocalVariableInstructionObject findLocalVariableInstruction(PlainVariable variable, List<LocalVariableInstructionObject> localVariableInstructions) {

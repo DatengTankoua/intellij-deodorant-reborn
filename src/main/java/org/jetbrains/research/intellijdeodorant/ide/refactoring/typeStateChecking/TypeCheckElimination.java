@@ -3,6 +3,7 @@ package org.jetbrains.research.intellijdeodorant.ide.refactoring.typeStateChecki
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiTypesUtil;
+import org.jetbrains.research.intellijdeodorant.core.ast.UtilityClass;
 import org.jetbrains.research.intellijdeodorant.core.ast.decomposition.CompositeStatementObject;
 import org.jetbrains.research.intellijdeodorant.core.ast.util.ExpressionExtractor;
 import org.jetbrains.research.intellijdeodorant.core.ast.util.MethodDeclarationUtility;
@@ -1111,13 +1112,7 @@ public class TypeCheckElimination implements Comparable<TypeCheckElimination> {
         else if (inheritanceTreeMatchingWithStaticTypes != null)
             tree = inheritanceTreeMatchingWithStaticTypes;
         if (tree != null) {
-            DefaultMutableTreeNode root = tree.getRootNode();
-            DefaultMutableTreeNode leaf = root.getFirstLeaf();
-            List<String> subclassNames = new ArrayList<>();
-            while (leaf != null) {
-                subclassNames.add((String) leaf.getUserObject());
-                leaf = leaf.getNextLeaf();
-            }
+            List<String> subclassNames = UtilityClass.getStrings(tree);
             PsiCodeBlock typeCheckMethodBody = getTypeCheckMethod().getBody();
             if (typeCheckMethodBody != null && typeCheckMethodBody.getStatements().length > 0
                     && typeCheckMethodBody.getStatements()[0] instanceof PsiSwitchStatement) {

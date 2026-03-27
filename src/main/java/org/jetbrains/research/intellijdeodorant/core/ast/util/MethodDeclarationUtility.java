@@ -1,6 +1,7 @@
 package org.jetbrains.research.intellijdeodorant.core.ast.util;
 
 import com.intellij.psi.*;
+import org.jetbrains.research.intellijdeodorant.core.ast.UtilityClass;
 import org.jetbrains.research.intellijdeodorant.core.ast.decomposition.cfg.AbstractVariable;
 import org.jetbrains.research.intellijdeodorant.core.ast.decomposition.cfg.CompositeVariable;
 import org.jetbrains.research.intellijdeodorant.core.ast.decomposition.cfg.PlainVariable;
@@ -19,18 +20,7 @@ public class MethodDeclarationUtility {
             if (statements.length == 1) {
                 PsiStatement statement = statements[0];
 
-                PsiMethodCallExpression methodInvocation = null;
-                if (statement instanceof PsiReturnStatement) {
-                    PsiReturnStatement returnStatement = (PsiReturnStatement) statement;
-                    if (returnStatement.getReturnValue() instanceof PsiMethodCallExpression) {
-                        methodInvocation = (PsiMethodCallExpression) returnStatement.getReturnValue();
-                    }
-                } else if (statement instanceof PsiExpressionStatement) {
-                    PsiExpressionStatement expressionStatement = (PsiExpressionStatement) statement;
-                    if (expressionStatement.getExpression() instanceof PsiMethodCallExpression) {
-                        methodInvocation = (PsiMethodCallExpression) expressionStatement.getExpression();
-                    }
-                }
+                PsiMethodCallExpression methodInvocation = UtilityClass.getPsiMethodCallExpression(statement);
 
                 if (methodInvocation != null) {
                     PsiExpression methodInvocationExpression = methodInvocation.getMethodExpression().getQualifierExpression();

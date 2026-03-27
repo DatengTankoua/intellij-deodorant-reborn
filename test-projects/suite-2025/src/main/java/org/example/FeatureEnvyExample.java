@@ -1,7 +1,10 @@
 package org.example;
 
-public class FeatureEnvyExample {
+import javax.swing.*;
+
+public class FeatureEnvyExample extends JPanel {
     private Customer customer;
+    private int age;
 
     // Cette méthode a Feature Envy - elle utilise trop Customer
     public String getCustomerFullInfo() {
@@ -16,6 +19,20 @@ public class FeatureEnvyExample {
         info.append(")");
         return info.toString();
     }
+
+    public int calculateDiscountForPremium(int amount) {
+        int discount = 10;
+        if (amount > 1000) {
+            discount = amount * 15 / 100;
+        } else if (amount > 500) {
+            discount = amount * 10 / 100;
+        } else if (amount > 100) {
+            discount = amount * 5 / 100;
+        }
+        System.out.println("Calculated discount: " + discount);
+        return discount;
+    }
+
 }
 
 class Customer {
