@@ -1,0 +1,68 @@
+name: Build and Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Plugin
+        run: ./gradlew buildPlugin
+
+      - name: Get plugin ZIP name
+        id: plugin_zip
+        run: |
+          ZIP=$(ls build/distributions/*.zip | head -n 1)
+          echo "path=$ZIP" >> $GITHUB_OUTPUT
+          echo "name=$(basename $ZIP)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "IntelliJDeodorant Reborn ${{ github.ref_name }}"
+          body: |
+            ## IntelliJDeodorant Reborn ${{ github.ref_name }}
+
+            Plugin de détection et refactorisation des code smells pour IntelliJ IDEA.
+
+            ### Installation manuelle
+            1. Téléchargez le fichier `.zip` ci-dessous
+            2. Dans IntelliJ IDEA : `File → Settings → Plugins → ⚙ → Install Plugin from Disk...`
+            3. Sélectionnez le fichier ZIP téléchargé
+            4. Redémarrez IntelliJ IDEA
+
+            ### Code smells détectés
+            - **Feature Envy** → Move Method
+            - **Long Method** → Extract Method
+            - **Type/State Checking** → Replace Conditional with Polymorphism
+            - **God Class** → Extract Class
+            - **Duplicate Code** → Extract / Pull-Up / Utility Class
+
+            ### Compatibilité
+            IntelliJ IDEA 2023.2 → 2025.2+
+          files: ${{ steps.plugin_zip.outputs.path }}
+          draft: false
+          prerelease: false

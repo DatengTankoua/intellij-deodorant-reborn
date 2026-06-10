@@ -1,8 +1,8 @@
-<idea-plugin url="https://github.com/JetBrains-Research/IntelliJDeodorant">
+<idea-plugin url="https://github.com/DatengTankoua/intellij-deodorant-reborn">
     <name>IntelliJDeodorant</name>
     <id>org.jetbrains.research.intellijdeodorant</id>
     <version>2025.2-COMPATIBLE-1.0</version>
-    <vendor email="research@jetbrains.com" url="https://research.jetbrains.org">JetBrains Research</vendor>
+    <vendor email="datengtankoua@gmail.com" url="https://github.com/DatengTankoua">Emery Dateng</vendor>
 
     <description><![CDATA[
     Detects code smells in Java code and recommends appropriate refactorings to resolve them.
