@@ -46,22 +46,22 @@ jobs:
           body: |
             ## IntelliJDeodorant Reborn ${{ github.ref_name }}
 
-            Plugin de détection et refactorisation des code smells pour IntelliJ IDEA.
+            Plugin of IntelliJ IDEA for detecting code smells and suggesting refactorings based on the original IntelliJDeodorant research project.
 
-            ### Installation manuelle
-            1. Téléchargez le fichier `.zip` ci-dessous
-            2. Dans IntelliJ IDEA : `File → Settings → Plugins → ⚙ → Install Plugin from Disk...`
-            3. Sélectionnez le fichier ZIP téléchargé
-            4. Redémarrez IntelliJ IDEA
+            ### Manual Installation
+            1. Download the `.zip` file below
+            2. In IntelliJ IDEA: `File → Settings → Plugins → ⚙ → Install Plugin from Disk...`
+            3. Select the downloaded ZIP file
+            4. Restart IntelliJ IDEA
 
-            ### Code smells détectés
+            ### Detected Code Smells
             - **Feature Envy** → Move Method
             - **Long Method** → Extract Method
             - **Type/State Checking** → Replace Conditional with Polymorphism
             - **God Class** → Extract Class
             - **Duplicate Code** → Extract / Pull-Up / Utility Class
 
-            ### Compatibilité
+            ### Compatibility
             IntelliJ IDEA 2023.2 → 2025.2+
           files: ${{ steps.plugin_zip.outputs.path }}
           draft: false
